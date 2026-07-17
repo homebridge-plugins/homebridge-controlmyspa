@@ -10,8 +10,7 @@
       "name": {
         "type": "string",
         "title": "Name",
-        "default": "ControlMySpa",
-        "required": true
+        "default": "ControlMySpa"
       },
       "credentials": {
         "type": "object",
