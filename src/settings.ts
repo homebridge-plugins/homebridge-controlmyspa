@@ -16,17 +16,14 @@ export const PLATFORM_NAME = 'ControlMySpa'
 export const PLUGIN_NAME = '@homebridge-plugins/homebridge-controlmyspa'
 
 /**
- * The ControlMySpa cloud endpoints. The idm endpoint hands out the mobile
- * client credentials and the token/whoami urls, so only the base is fixed.
+ * The ControlMySpa cloud base url
  */
 export const CMS_BASE_URL = 'https://iot.controlmyspa.com'
-export const CMS_IDM_URL = `${CMS_BASE_URL}/idm/tokenEndpoint`
-export const CMS_SPAS_URL = `${CMS_BASE_URL}/spas`
-export const CMS_CONTROL_URL = `${CMS_BASE_URL}/mobile/control`
 
 /**
- * The api reports temperatures in degrees fahrenheit; HomeKit works in
- * degrees celsius. Balboa spas top out at 104°F (40°C).
+ * The api sends and receives temperatures in degrees fahrenheit — the
+ * dashboard's isCelsius flag only describes the spa's own display unit.
+ * HomeKit works in degrees celsius. Balboa spas top out at 104°F (40°C).
  */
 export const SPA_MIN_TEMP_C = 10
 export const SPA_MAX_TEMP_C = 40
@@ -59,63 +56,65 @@ export interface devicesConfig {
 }
 
 // API types
-export interface CmsIdmResponse {
-  mobileClientId: string
-  mobileClientSecret: string
-  _links: {
-    tokenEndpoint: { href: string }
-    refreshEndpoint: { href: string }
-    whoami: { href: string }
-  }
-}
-
 export interface CmsTokenData {
   access_token: string
-  token_type?: string
-  refresh_token?: string
   expires_in: number
   timestamp: number
 }
 
+/**
+ * An entry from GET /spas/owned
+ */
+export interface CmsSpaSummary {
+  _id: string
+  alias?: string
+  serialNumber?: string
+  isDefault?: boolean
+}
+
 export interface CmsComponent {
   componentType: string
-  port?: string
-  value?: string
-  availableValues?: string[]
   name?: string
-  materialType?: string
+  port?: string | null
+  value?: string | null
+  availableValues?: string[]
+  materialType?: string | null
 }
 
-export interface CmsSpaState {
-  desiredTemp?: string
-  targetDesiredTemp?: string
-  currentTemp?: string
+/**
+ * The live state from GET /spas/{id}/dashboard (the `data` object)
+ */
+export interface CmsDashboard {
+  currentTemp?: number | string | null
+  desiredTemp?: number | string | null
+  isCelsius?: boolean
+  isPanelLocked?: boolean
+  isOnline?: boolean
   heaterMode?: string
-  panelLock?: boolean
-  online?: boolean
+  tempRange?: string
+  rangeLimits?: {
+    highRangeLow?: number
+    highRangeHigh?: number
+    lowRangeLow?: number
+    lowRangeHigh?: number
+  }
   components?: CmsComponent[]
-  controllerType?: string
-  runMode?: string
-  celsius?: boolean
-}
-
-export interface CmsSpa {
-  _id: string
   serialNumber?: string
-  productName?: string
-  model?: string
-  dealerId?: string
-  online?: boolean
-  currentState?: CmsSpaState
+  systemInfo?: {
+    controllerSoftwareVersion?: string
+  }
+  currentFaultMessage?: unknown
+  totalAlerts?: number
 }
 
 /**
  * Convert an api fahrenheit reading to celsius, rounded to one decimal
- * place (HomeKit's display resolution). The api sends temps as strings.
+ * place (HomeKit's display resolution). A zero reading means "no reading"
+ * on this api and returns undefined.
  */
-export function fahrenheitToCelsius(value: string | number | undefined): number | undefined {
-  const parsed = typeof value === 'string' ? Number.parseFloat(value) : value
-  if (parsed === undefined || Number.isNaN(parsed)) {
+export function fahrenheitToCelsius(value: string | number | null | undefined): number | undefined {
+  const parsed = typeof value === 'string' ? Number.parseFloat(value) : value ?? undefined
+  if (parsed === undefined || Number.isNaN(parsed) || parsed === 0) {
     return undefined
   }
   return Math.round(((parsed - 32) * 5 / 9) * 10) / 10

@@ -6,7 +6,7 @@
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge'
 
 import type { ControlMySpaPlatform } from '../platform.js'
-import type { CmsComponent, CmsSpa, devicesConfig } from '../settings.js'
+import type { CmsComponent, CmsDashboard, CmsSpaSummary, devicesConfig } from '../settings.js'
 
 import { celsiusToFahrenheit, fahrenheitToCelsius, SPA_MAX_TEMP_C, SPA_MIN_TEMP_C } from '../settings.js'
 
@@ -27,22 +27,26 @@ export class SpaAccessory {
   private panelLockService?: Service
   private readonly componentServices = new Map<string, Service>()
 
-  private spa: CmsSpa
+  public readonly spaId: string
+  public readonly displayName: string
+  private dashboard: CmsDashboard = {}
   private settleTimer?: ReturnType<typeof setTimeout>
+  private lastFaultMessage?: string
 
   constructor(
     private readonly platform: ControlMySpaPlatform,
     private readonly accessory: PlatformAccessory,
-    spa: CmsSpa,
+    spa: CmsSpaSummary,
     private readonly deviceConfig: devicesConfig,
   ) {
-    this.spa = spa
+    this.spaId = spa._id
+    this.displayName = accessory.displayName
     const { Characteristic, Service } = this.platform.hap
 
     // Accessory information
     this.accessory.getService(Service.AccessoryInformation)!
       .setCharacteristic(Characteristic.Manufacturer, 'Balboa Water Group')
-      .setCharacteristic(Characteristic.Model, spa.currentState?.controllerType ?? 'ControlMySpa')
+      .setCharacteristic(Characteristic.Model, 'ControlMySpa')
       .setCharacteristic(Characteristic.SerialNumber, spa.serialNumber ?? spa._id)
       .setCharacteristic(Characteristic.FirmwareRevision, deviceConfig.firmware ?? this.platform.version ?? '1.0.0')
 
@@ -80,7 +84,7 @@ export class SpaAccessory {
 
     this.thermostatService
       .getCharacteristic(Characteristic.TemperatureDisplayUnits)
-      .onGet(() => this.spa.currentState?.celsius
+      .onGet(() => this.dashboard.isCelsius
         ? Characteristic.TemperatureDisplayUnits.CELSIUS
         : Characteristic.TemperatureDisplayUnits.FAHRENHEIT)
 
@@ -92,12 +96,12 @@ export class SpaAccessory {
       this.panelLockService.setCharacteristic(Characteristic.Name, 'Panel Lock')
       this.panelLockService
         .getCharacteristic(Characteristic.LockCurrentState)
-        .onGet(() => this.spa.currentState?.panelLock
+        .onGet(() => this.dashboard.isPanelLocked
           ? Characteristic.LockCurrentState.SECURED
           : Characteristic.LockCurrentState.UNSECURED)
       this.panelLockService
         .getCharacteristic(Characteristic.LockTargetState)
-        .onGet(() => this.spa.currentState?.panelLock
+        .onGet(() => this.dashboard.isPanelLocked
           ? Characteristic.LockTargetState.SECURED
           : Characteristic.LockTargetState.UNSECURED)
         .onSet(value => this.setPanelLock(value))
@@ -148,8 +152,8 @@ export class SpaAccessory {
   }
 
   private controllableComponents(): CmsComponent[] {
-    return (this.spa.currentState?.components ?? [])
-      .filter(component => CONTROLLABLE_TYPES.includes(component.componentType) && component.port !== undefined)
+    return (this.dashboard.components ?? [])
+      .filter(component => CONTROLLABLE_TYPES.includes(component.componentType) && component.port !== undefined && component.port !== null)
   }
 
   private componentSubtype(component: CmsComponent): string {
@@ -163,27 +167,27 @@ export class SpaAccessory {
     return ofType.length > 1 ? `${base} ${Number.parseInt(component.port!) + 1}` : base
   }
 
-  private findComponent(componentType: string, port?: string): CmsComponent | undefined {
-    return (this.spa.currentState?.components ?? [])
+  private findComponent(componentType: string, port?: string | null): CmsComponent | undefined {
+    return (this.dashboard.components ?? [])
       .find(component => component.componentType === componentType && component.port === port)
   }
 
-  private componentIsOn(componentType: string, port?: string): boolean {
+  private componentIsOn(componentType: string, port?: string | null): boolean {
     const value = this.findComponent(componentType, port)?.value
-    return value !== undefined && value !== 'OFF'
+    return value !== undefined && value !== null && value !== 'OFF'
   }
 
   private heaterModeIsReady(): boolean {
-    return this.spa.currentState?.heaterMode === 'READY'
+    return this.dashboard.heaterMode === 'READY'
   }
 
   private currentTemperature(): number {
-    return fahrenheitToCelsius(this.spa.currentState?.currentTemp)
+    return fahrenheitToCelsius(this.dashboard.currentTemp)
       ?? this.targetTemperature()
   }
 
   private targetTemperature(): number {
-    const target = fahrenheitToCelsius(this.spa.currentState?.desiredTemp ?? this.spa.currentState?.targetDesiredTemp)
+    const target = fahrenheitToCelsius(this.dashboard.desiredTemp)
     if (target === undefined) {
       return SPA_MIN_TEMP_C
     }
@@ -194,11 +198,9 @@ export class SpaAccessory {
     const celsius = value as number
     const fahrenheit = celsiusToFahrenheit(celsius)
     try {
-      await this.platform.client!.setDesiredTemp(this.spa._id, fahrenheit)
+      await this.platform.client!.setDesiredTemp(this.spaId, fahrenheit)
       await this.platform.infoLog(`${this.accessory.displayName} setting water temperature to ${celsius}°C (${fahrenheit}°F)`)
-      if (this.spa.currentState) {
-        this.spa.currentState.desiredTemp = fahrenheit.toString()
-      }
+      this.dashboard.desiredTemp = fahrenheit
       this.schedulePostCommandRefresh()
     } catch (e: any) {
       await this.platform.errorLog(`${this.accessory.displayName} failed to set water temperature: ${e.message}`)
@@ -213,13 +215,9 @@ export class SpaAccessory {
       return
     }
     try {
-      // The api only offers a toggle between READY and REST, so this is
-      // guarded above to only fire when the current mode differs
-      await this.platform.client!.toggleHeaterMode(this.spa._id)
+      await this.platform.client!.setHeaterMode(this.spaId, wantReady ? 'READY' : 'REST')
       await this.platform.infoLog(`${this.accessory.displayName} setting heater mode to ${wantReady ? 'READY' : 'REST'}`)
-      if (this.spa.currentState) {
-        this.spa.currentState.heaterMode = wantReady ? 'READY' : 'REST'
-      }
+      this.dashboard.heaterMode = wantReady ? 'READY' : 'REST'
       this.schedulePostCommandRefresh()
     } catch (e: any) {
       await this.platform.errorLog(`${this.accessory.displayName} failed to change heater mode: ${e.message}`)
@@ -227,16 +225,11 @@ export class SpaAccessory {
     }
   }
 
-  private async setComponentState(componentType: string, port: string | undefined, on: boolean) {
+  private async setComponentState(componentType: string, port: string | null | undefined, on: boolean) {
     const devicePort = port ?? '0'
+    const apiType = ({ PUMP: 'jet', BLOWER: 'blower', LIGHT: 'light' } as const)[componentType] ?? 'jet'
     try {
-      if (componentType === 'PUMP') {
-        await this.platform.client!.setJetState(this.spa._id, devicePort, on)
-      } else if (componentType === 'BLOWER') {
-        await this.platform.client!.setBlowerState(this.spa._id, devicePort, on)
-      } else {
-        await this.platform.client!.setLightState(this.spa._id, devicePort, on)
-      }
+      await this.platform.client!.setComponentState(this.spaId, apiType, devicePort, on)
       await this.platform.infoLog(`${this.accessory.displayName} setting ${componentType.toLowerCase()} ${devicePort} to ${on ? 'on' : 'off'}`)
       const component = this.findComponent(componentType, port)
       if (component) {
@@ -253,11 +246,9 @@ export class SpaAccessory {
     const { Characteristic } = this.platform.hap
     const locked = value === Characteristic.LockTargetState.SECURED
     try {
-      await this.platform.client!.setPanelLock(this.spa._id, locked)
+      await this.platform.client!.setPanelLock(this.spaId, locked)
       await this.platform.infoLog(`${this.accessory.displayName} ${locked ? 'locking' : 'unlocking'} the spa panel`)
-      if (this.spa.currentState) {
-        this.spa.currentState.panelLock = locked
-      }
+      this.dashboard.isPanelLocked = locked
       this.panelLockService?.updateCharacteristic(
         Characteristic.LockCurrentState,
         locked ? Characteristic.LockCurrentState.SECURED : Characteristic.LockCurrentState.UNSECURED,
@@ -287,9 +278,21 @@ export class SpaAccessory {
    * Called by the platform with fresh state from each poll — push every
    * value to HomeKit so tiles update without being asked
    */
-  public updateFromSpa(spa: CmsSpa) {
-    this.spa = spa
+  public updateFromDashboard(dashboard: CmsDashboard) {
+    this.dashboard = dashboard
     const { Characteristic } = this.platform.hap
+
+    // Surface a spa fault the first time it appears
+    const fault = typeof dashboard.currentFaultMessage === 'string' ? dashboard.currentFaultMessage : undefined
+    if (fault && fault !== this.lastFaultMessage) {
+      void this.platform.warnLog(`${this.accessory.displayName} is reporting a fault: ${fault}`)
+    }
+    this.lastFaultMessage = fault
+
+    if (dashboard.systemInfo?.controllerSoftwareVersion && !this.deviceConfig.firmware) {
+      this.accessory.getService(this.platform.hap.Service.AccessoryInformation)!
+        .updateCharacteristic(Characteristic.FirmwareRevision, dashboard.systemInfo.controllerSoftwareVersion)
+    }
 
     // New components can appear if the spa configuration changes
     this.buildComponentServices()
@@ -311,7 +314,7 @@ export class SpaAccessory {
     }
 
     if (this.panelLockService) {
-      const locked = this.spa.currentState?.panelLock === true
+      const locked = this.dashboard.isPanelLocked === true
       this.panelLockService.updateCharacteristic(
         Characteristic.LockCurrentState,
         locked ? Characteristic.LockCurrentState.SECURED : Characteristic.LockCurrentState.UNSECURED,

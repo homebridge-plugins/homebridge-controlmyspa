@@ -5,7 +5,7 @@
 
 import type { API, DynamicPlatformPlugin, HAP, Logging, PlatformAccessory } from 'homebridge'
 
-import type { CmsSpa, ControlMySpaPlatformConfig, devicesConfig, options } from './settings.js'
+import type { CmsSpaSummary, ControlMySpaPlatformConfig, devicesConfig, options } from './settings.js'
 
 import { readFileSync } from 'node:fs'
 import { argv } from 'node:process'
@@ -139,25 +139,30 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
 
     const configuredUUIDs: string[] = []
     for (const spa of spas) {
+      this.infoLog(`Found spa: ${spa.alias ?? 'unnamed'}, SpaID: ${spa._id}`)
       const uuid = this.api.hap.uuid.generate(spa._id)
       configuredUUIDs.push(uuid)
       await this.createSpa(spa, uuid)
     }
 
     this.removeStaleAccessories(configuredUUIDs)
+
+    // Fetch each spa's live state straight away rather than waiting for
+    // the first poll interval
+    await this.pollNow()
   }
 
-  private deviceConfigFor(spa: CmsSpa): devicesConfig {
+  private deviceConfigFor(spa: CmsSpaSummary): devicesConfig {
     return this.config.options?.devices?.find(device => device.spaId === spa._id) ?? {}
   }
 
-  private spaDisplayName(spa: CmsSpa, deviceConfig: devicesConfig): string {
+  private spaDisplayName(spa: CmsSpaSummary, deviceConfig: devicesConfig): string {
     return deviceConfig.configDeviceName
-      ?? spa.productName
+      ?? spa.alias
       ?? `Spa ${spa._id.slice(-4)}`
   }
 
-  private async createSpa(spa: CmsSpa, uuid: string) {
+  private async createSpa(spa: CmsSpaSummary, uuid: string) {
     const deviceConfig = this.deviceConfigFor(spa)
     const displayName = this.spaDisplayName(spa, deviceConfig)
 
@@ -226,13 +231,14 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
     }
     this.pollInFlight = true
     try {
-      const spas = await this.client.getSpas()
-      for (const spa of spas) {
-        const uuid = this.api.hap.uuid.generate(spa._id)
-        this.spaHandlers.get(uuid)?.updateFromSpa(spa)
+      for (const handler of this.spaHandlers.values()) {
+        try {
+          const dashboard = await this.client.getDashboard(handler.spaId)
+          handler.updateFromDashboard(dashboard)
+        } catch (e: any) {
+          this.warnLog(`Failed to refresh state for ${handler.displayName}: ${e.message}`)
+        }
       }
-    } catch (e: any) {
-      this.warnLog(`Failed to refresh spa state: ${e.message}`)
     } finally {
       this.pollInFlight = false
     }
