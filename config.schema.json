@@ -1,0 +1,166 @@
+{
+  "pluginAlias": "ControlMySpa",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "<p align='center'><img width='250px' src='https://raw.githubusercontent.com/homebridge-plugins/homebridge-controlmyspa/latest/branding/Homebridge_x_ControlMySpa.svg'></p>\n\nThe **ControlMySpa** plugin allows you to control your Balboa ControlMySpa hot tub from HomeKit. To get started link your ControlMySpa account below.",
+  "footerDisplay": "Your spa must be connected to the ControlMySpa cloud and working in the ControlMySpa app before using this plugin.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "title": "Name",
+        "default": "ControlMySpa",
+        "required": true
+      },
+      "credentials": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string",
+            "x-schema-form": {
+              "type": "email"
+            },
+            "description": "The email for your ControlMySpa account."
+          },
+          "password": {
+            "title": "Password",
+            "type": "string",
+            "x-schema-form": {
+              "type": "password"
+            },
+            "description": "The password for your ControlMySpa account."
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "spaId": {
+                  "title": "Spa ID",
+                  "type": "string",
+                  "description": "The spa's ID as shown in the Homebridge log at startup."
+                },
+                "configDeviceName": {
+                  "title": "Device Name",
+                  "type": "string",
+                  "placeholder": "Hot Tub",
+                  "description": "A custom name for this spa in HomeKit.",
+                  "condition": {
+                    "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId);"
+                  }
+                },
+                "hide_device": {
+                  "title": "Hide Device",
+                  "type": "boolean",
+                  "description": "If enabled, this spa will not be shown in HomeKit.",
+                  "condition": {
+                    "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId);"
+                  }
+                },
+                "showPanelLock": {
+                  "title": "Show Panel Lock",
+                  "type": "boolean",
+                  "default": false,
+                  "description": "If enabled, a lock is shown in HomeKit to lock and unlock the spa's physical control panel.",
+                  "condition": {
+                    "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId && !model.options.devices[arrayIndices].hide_device);"
+                  }
+                },
+                "firmware": {
+                  "title": "Firmware Override",
+                  "type": "string",
+                  "description": "Overrides the firmware version shown in HomeKit.",
+                  "condition": {
+                    "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId && !model.options.devices[arrayIndices].hide_device);"
+                  }
+                }
+              }
+            }
+          },
+          "refreshRate": {
+            "title": "Refresh Rate",
+            "type": "number",
+            "minimum": 30,
+            "placeholder": 60,
+            "description": "How often, in seconds, the plugin fetches the latest spa state from the ControlMySpa cloud. Default is 60, minimum is 30."
+          },
+          "logging": {
+            "title": "Logging Setting",
+            "type": "string",
+            "oneOf": [
+              {
+                "title": "Default Logging",
+                "enum": [""]
+              },
+              {
+                "title": "Standard Logging",
+                "enum": ["standard"]
+              },
+              {
+                "title": "No Logging",
+                "enum": ["none"]
+              },
+              {
+                "title": "Debug Logging",
+                "enum": ["debug"]
+              }
+            ],
+            "description": "Choose the logging level for the plugin."
+          }
+        }
+      }
+    },
+    "required": ["name", "credentials"]
+  },
+  "layout": [
+    {
+      "type": "fieldset",
+      "title": "ControlMySpa Account Info",
+      "expandable": true,
+      "expanded": true,
+      "items": [
+        "credentials.email",
+        "credentials.password"
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Spa Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        {
+          "key": "options.devices",
+          "notitle": true,
+          "type": "tabarray",
+          "title": "{{ value.configDeviceName || value.spaId || 'New Spa' }}",
+          "items": [
+            "options.devices[].spaId",
+            "options.devices[].configDeviceName",
+            "options.devices[].hide_device",
+            "options.devices[].showPanelLock",
+            "options.devices[].firmware"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Advanced Settings",
+      "expandable": true,
+      "expanded": false,
+      "items": [
+        "options.refreshRate",
+        "options.logging"
+      ]
+    }
+  ]
+}
