@@ -43,7 +43,8 @@ Homebridge plugin to integrate Balboa ControlMySpa hot tubs into HomeKit
 
 ### Credits
 
-- The ControlMySpa cloud protocol was originally documented by [@VVlasy's controlmyspajs](https://github.com/VVlasy/controlmyspajs).
+- The current ControlMySpa cloud protocol is documented by [@haresik's Home Assistant integration](https://github.com/haresik/Hares-ControlMySpa), which this plugin's api client is based on.
+- The original ControlMySpa cloud protocol was first documented by [@VVlasy's controlmyspajs](https://github.com/VVlasy/controlmyspajs).
 
 ### Disclaimer
 
