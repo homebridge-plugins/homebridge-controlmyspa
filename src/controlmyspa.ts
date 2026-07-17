@@ -174,11 +174,13 @@ export class ControlMySpaClient {
   }
 
   /**
-   * Set a jet pump, blower or light on a numbered port to OFF or HIGH
+   * Set a jet pump, blower or light on a numbered port to OFF or HIGH.
+   * The dashboard reports ports as strings but the command api validates
+   * deviceNumber as a number, so it is converted here.
    */
   public async setComponentState(spaId: string, componentType: 'jet' | 'blower' | 'light', deviceNumber: string, on: boolean): Promise<void> {
     await this.command('component-state', spaId, {
-      deviceNumber,
+      deviceNumber: Number.parseInt(deviceNumber, 10),
       componentType,
       state: on ? 'HIGH' : 'OFF',
     })
