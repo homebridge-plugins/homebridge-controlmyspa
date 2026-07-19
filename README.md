@@ -27,20 +27,25 @@ Homebridge plugin to integrate Balboa ControlMySpa hot tubs into HomeKit
     - an optional lock for the spa's physical control panel
 - This plugin is for spas connected to the **ControlMySpa cloud**. If your Balboa spa uses a local WiFi module instead, [homebridge-balboa-spa](https://github.com/plasticrake/homebridge-balboa-spa) may suit better.
 
+### Prerequisites
+
+- To use this plugin, you will need to already have:
+  - [Node](https://nodejs.org): latest version of `v22` or `v24` - any other major version is not supported.
+  - [Homebridge](https://homebridge.io): `v2` - refer to link for more information and installation instructions.
+
 ### Setup
 
-- Installation
-  - Search for "ControlMySpa" on the plugin screen of the [Homebridge UI](https://github.com/homebridge/homebridge-config-ui-x) and click **Install**.
-- Configuration
-  1. Your spa must already be set up and working in the ControlMySpa mobile app.
-  2. Enter your ControlMySpa account e-mail and password in the plugin settings.
-  3. Click **Save** and restart Homebridge.
+- [Installation](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Installation)
+- [Configuration](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Configuration)
+- [Beta Version](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Beta-Version)
+- [Node Version](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Node-Version)
 
 ### Help/About
 
-- [Bug Report](https://github.com/homebridge-plugins/homebridge-controlmyspa/issues/new/choose)
+- [Common Errors](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Common-Errors)
 - [Support Request](https://github.com/homebridge-plugins/homebridge-controlmyspa/issues/new/choose)
 - [Changelog](https://github.com/homebridge-plugins/homebridge-controlmyspa/blob/latest/CHANGELOG.md)
+- [About Me](https://github.com/sponsors/bwp91)
 
 ### Credits
 
