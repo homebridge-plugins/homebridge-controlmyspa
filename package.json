@@ -2,7 +2,7 @@
   "name": "@homebridge-plugins/homebridge-controlmyspa",
   "displayName": "Homebridge ControlMySpa",
   "type": "module",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "The ControlMySpa plugin allows you to access your Balboa ControlMySpa hot tub from HomeKit.",
   "author": {
     "name": "bwp91",
