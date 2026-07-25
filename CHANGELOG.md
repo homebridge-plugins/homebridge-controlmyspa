@@ -2,6 +2,12 @@
 
 All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be documented in this file.
 
+## v1.1.0 (Pending Release)
+
+### Changed
+
+- feat(ui): add a custom ui with settings, my devices and support tabs, including the device picker
+
 ## v1.0.4 (2026-07-20)
 
 ### Changed

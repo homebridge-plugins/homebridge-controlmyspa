@@ -2,6 +2,8 @@
   "pluginAlias": "ControlMySpa",
   "pluginType": "platform",
   "singular": true,
+  "customUi": true,
+  "customUiPath": "./dist/homebridge-ui",
   "headerDisplay": "<p align='center'><img width='250px' src='https://raw.githubusercontent.com/homebridge-plugins/homebridge-controlmyspa/latest/branding/Homebridge_x_ControlMySpa.png'></p>\n\nThe **ControlMySpa** plugin allows you to control your Balboa ControlMySpa hot tub from HomeKit. To get started link your ControlMySpa account below.",
   "footerDisplay": "Your spa must be connected to the ControlMySpa cloud and working in the ControlMySpa app before using this plugin.",
   "schema": {
