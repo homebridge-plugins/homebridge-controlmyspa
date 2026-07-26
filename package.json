@@ -33,6 +33,7 @@
   },
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "controlmyspa",
     "balboa",
     "spa",
