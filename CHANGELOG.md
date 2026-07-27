@@ -6,11 +6,16 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 
 ### Changed
 
+- chore(github): allow the codeql scan to be started manually
+- chore(github): stop concurrent release runs racing for the same version
+- chore(github): use the shared homebridge action to deprecate past pre-releases
+- docs(github): name this plugin's devices in the issue forms instead of meater
 - feat(ui): add a custom ui with settings, my devices and support tabs, including the device picker
 - style(ui): standardise the custom ui layout and sync the support tab with the readme
 - feat(ui): add a remove all devices action to the my devices tab
 - chore: declare the supports-hap transport keyword for the homebridge ui
 - chore(deps): dependency updates
+- docs(changelog): list every unreleased commit in the pending section
 
 ## v1.0.4 (2026-07-20)
 
