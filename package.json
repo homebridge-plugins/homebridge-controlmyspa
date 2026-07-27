@@ -65,7 +65,7 @@
     "@homebridge/plugin-ui-utils": "^2.2.5"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^9.1.0",
+    "@antfu/eslint-config": "^9.2.0",
     "@types/node": "^26.1.1",
     "@vitest/coverage-v8": "^4.1.10",
     "homebridge": "^2.2.1",

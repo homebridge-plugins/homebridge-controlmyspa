@@ -10,6 +10,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - style(ui): standardise the custom ui layout and sync the support tab with the readme
 - feat(ui): add a remove all devices action to the my devices tab
 - chore: declare the supports-hap transport keyword for the homebridge ui
+- chore(deps): dependency updates
 
 ## v1.0.4 (2026-07-20)
 
