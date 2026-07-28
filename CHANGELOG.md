@@ -2,6 +2,12 @@
 
 All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be documented in this file.
 
+## v1.1.1 (Pending Release)
+
+### Changed
+
+- chore: keep test files out of the published package
+
 ## v1.1.0 (2026-07-27)
 
 ### Changed
