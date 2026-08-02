@@ -13,6 +13,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - chore: count a repeated commit subject once when syncing the changelog
 - chore(github): check the changelog against the commits in ci
 - chore(deps): dependency updates
+- docs: add node 26 to the supported node versions
 
 ## v1.1.0 (2026-07-27)
 
