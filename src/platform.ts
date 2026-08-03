@@ -39,6 +39,9 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
   private readonly spaHandlers = new Map<string, SpaAccessory>()
   private pollTimer?: ReturnType<typeof setInterval>
   private pollInFlight = false
+  // Set while the cloud is failing to answer, so a run of identical failures is
+  // announced once rather than on every poll and every button press
+  private cloudOutage?: { since: number, suppressed: number }
 
   constructor(
     log: Logging,
@@ -85,7 +88,7 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
         await this.discoverDevices()
         this.startPolling()
       } catch (e: any) {
-        this.errorLog(`Failed to Discover Spas, Error Message: ${e.message}`)
+        await this.reportCloudFailure('Failed to Discover Spas', e)
         this.debugErrorLog(`Failed to Discover Spas, Error: ${e}`)
       }
     })
@@ -235,13 +238,62 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
         try {
           const dashboard = await this.client.getDashboard(handler.spaId)
           handler.updateFromDashboard(dashboard)
+          await this.noteCloudReachable()
         } catch (e: any) {
-          this.warnLog(`Failed to refresh state for ${handler.displayName}: ${e.message}`)
+          await this.reportCloudFailure(`Failed to refresh state for ${handler.displayName}`, e)
         }
       }
     } finally {
       this.pollInFlight = false
     }
+  }
+
+  /**
+   * Whether an error means the ControlMySpa cloud is simply not answering,
+   * rather than something specific being wrong with the request. A timeout and
+   * a 5xx are both the server's problem and both clear up on their own; a 4xx
+   * is about this request and is always worth reporting.
+   */
+  private static isCloudUnreachable(e: any): boolean {
+    const message = String(e?.message ?? '')
+    return /timed out after \d+ seconds/.test(message) || /failed with status 5\d\d/.test(message)
+  }
+
+  /**
+   * Report a failed cloud call.
+   *
+   * An outage lasts hours and the plugin retries every refresh interval, so
+   * reporting each failure fills the log with the same line - one report of a
+   * real outage ran to 147 of them. The first is announced and the rest are
+   * kept to the debug log until the cloud answers again.
+   */
+  public async reportCloudFailure(context: string, e: any): Promise<void> {
+    const message = `${context}: ${e?.message ?? e}`
+    if (!ControlMySpaPlatform.isCloudUnreachable(e)) {
+      await this.errorLog(message)
+      return
+    }
+    if (this.cloudOutage) {
+      this.cloudOutage.suppressed += 1
+      await this.debugLog(message)
+      return
+    }
+    this.cloudOutage = { since: Date.now(), suppressed: 0 }
+    await this.warnLog(`${message}. The ControlMySpa cloud is not responding, which is at their end rather than yours - this will not be repeated until it is back.`)
+  }
+
+  /**
+   * Note that a cloud call succeeded, ending any outage that was in progress.
+   */
+  public async noteCloudReachable(): Promise<void> {
+    if (!this.cloudOutage) {
+      return
+    }
+    const { since, suppressed } = this.cloudOutage
+    this.cloudOutage = undefined
+    const minutes = Math.max(1, Math.round((Date.now() - since) / 60000))
+    const alsoHidden = suppressed > 0 ? `, hiding ${suppressed} more of the same` : ''
+    await this.successLog(`The ControlMySpa cloud is responding again after ${minutes} minute(s)${alsoHidden}`)
   }
 
   async getPlatformLogSettings() {

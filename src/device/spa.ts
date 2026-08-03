@@ -203,7 +203,7 @@ export class SpaAccessory {
       this.dashboard.desiredTemp = fahrenheit
       this.schedulePostCommandRefresh()
     } catch (e: any) {
-      await this.platform.errorLog(`${this.accessory.displayName} failed to set water temperature: ${e.message}`)
+      await this.platform.reportCloudFailure(`${this.accessory.displayName} failed to set water temperature`, e)
       throw new this.platform.hap.HapStatusError(this.platform.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
     }
   }
@@ -237,7 +237,7 @@ export class SpaAccessory {
       }
       this.schedulePostCommandRefresh()
     } catch (e: any) {
-      await this.platform.errorLog(`${this.accessory.displayName} failed to set ${componentType.toLowerCase()} state: ${e.message}`)
+      await this.platform.reportCloudFailure(`${this.accessory.displayName} failed to set ${componentType.toLowerCase()} state`, e)
       throw new this.platform.hap.HapStatusError(this.platform.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
     }
   }
@@ -255,7 +255,7 @@ export class SpaAccessory {
       )
       this.schedulePostCommandRefresh()
     } catch (e: any) {
-      await this.platform.errorLog(`${this.accessory.displayName} failed to set the panel lock: ${e.message}`)
+      await this.platform.reportCloudFailure(`${this.accessory.displayName} failed to set the panel lock`, e)
       throw new this.platform.hap.HapStatusError(this.platform.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
     }
   }
