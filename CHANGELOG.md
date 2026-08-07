@@ -17,6 +17,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - chore: allow dependency install scripts by package name rather than pinned version, so a version bump cannot silently block a native build
 - chore: exclude test files and the test config from the published package
 - fix: say once when the controlmyspa cloud stops responding, and again when it is back, instead of a line for every failed check
+- fix: restore debug logging when the plugin runs in a child bridge
 
 ## v1.1.0 (2026-07-27)
 
