@@ -95,6 +95,7 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
       if (this.pollTimer) {
         clearInterval(this.pollTimer)
       }
+      this.spaHandlers.forEach(handler => handler.shutdown())
     })
   }
 

@@ -276,6 +276,18 @@ export class SpaAccessory {
    * The spa applies commands over a few seconds — re-poll once shortly
    * after a command so HomeKit shows the confirmed state
    */
+  /**
+   * Cancel anything this spa has pending, so a settle poll cannot start a fresh
+   * request against the cloud while Homebridge is shutting down - and cannot
+   * hold the process open long enough to be killed rather than exit cleanly
+   */
+  public shutdown() {
+    if (this.settleTimer) {
+      clearTimeout(this.settleTimer)
+      this.settleTimer = undefined
+    }
+  }
+
   private schedulePostCommandRefresh() {
     if (this.settleTimer) {
       clearTimeout(this.settleTimer)

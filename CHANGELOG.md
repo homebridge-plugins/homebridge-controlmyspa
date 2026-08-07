@@ -22,6 +22,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - fix: keep the jets, blower and light tiles when a poll returns no components
 - fix: recover from a connection dropped mid-response instead of stopping every poll
 - fix: always send a heater mode change, rather than trusting the cached mode
+- fix: cancel a pending settle poll when homebridge shuts down
 
 ## v1.1.0 (2026-07-27)
 
