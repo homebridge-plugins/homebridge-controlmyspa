@@ -220,9 +220,12 @@ export class SpaAccessory {
   private async setHeaterMode(value: CharacteristicValue) {
     const { Characteristic } = this.platform.hap
     const wantReady = value === Characteristic.TargetHeatingCoolingState.HEAT
-    if (wantReady === this.heaterModeIsReady()) {
-      return
-    }
+
+    // No short-circuit on the cached mode here. The cache is written optimistically
+    // as soon as the api acknowledges, and the spa can be put back to REST at its
+    // own panel between polls - so "the cache already says READY" is not evidence
+    // the spa is heating. Skipping the send made a scheduled automation quietly do
+    // nothing, with no log line to show for it. None of the other setters do this.
     try {
       await this.platform.client!.setHeaterMode(this.spaId, wantReady ? 'READY' : 'REST')
       await this.platform.infoLog(`${this.accessory.displayName} setting heater mode to ${wantReady ? 'READY' : 'REST'}`)
