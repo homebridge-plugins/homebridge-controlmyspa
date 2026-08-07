@@ -142,6 +142,15 @@ export class SpaAccessory {
       this.componentServices.set(subtype, service)
     }
 
+    // A dashboard that lists no controllable components at all is a partial
+    // response far more often than it is a spa that has lost its pumps, blower
+    // and light. Removing the services on the strength of it drops any scene or
+    // automation that used them, and HomeKit does not put those back when the
+    // services reappear on the next poll - so leave them alone.
+    if (seenSubtypes.size === 0) {
+      return
+    }
+
     // Remove services for components the spa no longer reports
     for (const [subtype, service] of this.componentServices) {
       if (!seenSubtypes.has(subtype)) {
