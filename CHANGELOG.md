@@ -18,6 +18,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - chore: exclude test files and the test config from the published package
 - fix: say once when the controlmyspa cloud stops responding, and again when it is back, instead of a line for every failed check
 - fix: restore debug logging when the plugin runs in a child bridge
+- fix: keep the spa accessories when the account list comes back empty
 
 ## v1.1.0 (2026-07-27)
 

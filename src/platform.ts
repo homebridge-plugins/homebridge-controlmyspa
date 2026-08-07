@@ -135,7 +135,14 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
     this.debugLog(`Found ${spas.length} spa(s) on the account`)
 
     if (!spas.length) {
-      this.warnLog('No spas were found on this ControlMySpa account')
+      // An empty list is not proof that the account has no spas. The client
+      // hands back an empty list for any 200 response whose body it could not
+      // read - a maintenance page, or a change in the response shape. Sweeping
+      // the cached accessories on the strength of that would take the owner's
+      // room assignments, scenes and automations with it, and a later restart
+      // would only bring the spa back as a brand new accessory.
+      this.warnLog('No spas were found on this ControlMySpa account, so the existing accessories have been left alone')
+      return
     }
 
     const configuredUUIDs: string[] = []

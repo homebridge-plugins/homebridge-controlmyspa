@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ControlMySpaClient } from './controlmyspa.js'
 import { ControlMySpaPlatform } from './platform.js'
 
 /**
@@ -141,5 +142,32 @@ describe('when the cloud comes back', () => {
     await platform.reportCloudFailure('Failed to refresh state for Spa Pool', new Error(TIMEOUT))
 
     expect(logs.warn).toHaveLength(2)
+  })
+})
+
+/**
+ * An empty spa list used to be treated as "the account has no spas", which
+ * unregistered every cached accessory. The client returns an empty list for any
+ * 200 response it cannot read, so a maintenance page was enough to destroy the
+ * owner's rooms, scenes and automations.
+ */
+describe('an account that comes back with no spas', () => {
+  it('leaves the cached accessories alone', async () => {
+    const { platform } = makePlatform()
+    const removed: string[] = []
+
+    Object.assign(platform, {
+      config: { credentials: { email: 'someone@example.com', password: 'secret' } },
+      accessories: [{ UUID: 'cached-uuid', displayName: 'Spa Pool' }],
+      unregisterPlatformAccessories: (accessory: { UUID: string }) => removed.push(accessory.UUID),
+      infoLog: async () => {},
+      pollNow: async () => {},
+    })
+
+    vi.spyOn(ControlMySpaClient.prototype, 'getSpas').mockResolvedValue([])
+
+    await platform.discoverDevices()
+
+    expect(removed).toEqual([])
   })
 })
