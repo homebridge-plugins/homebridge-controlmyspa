@@ -207,6 +207,13 @@ export class ControlMySpaClient {
         timeout: REQUEST_TIMEOUT_MS,
       }, (res) => {
         const chunks: Buffer[] = []
+
+        // The request's own 'error' handler below only covers failures before the
+        // response arrives. Once the headers are in, node reports a dropped
+        // connection by erroring the response stream instead - with no listener
+        // here that is an uncaught exception, and the promise never settles, so
+        // polling would stop for good even if the bridge survived.
+        res.on('error', error => reject(error))
         res.on('data', chunk => chunks.push(chunk))
         res.on('end', () => {
           const statusCode = res.statusCode ?? 0
