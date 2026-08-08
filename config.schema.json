@@ -90,6 +90,7 @@
             "title": "Refresh Rate",
             "type": "number",
             "minimum": 30,
+            "maximum": 2073600,
             "placeholder": 60,
             "description": "How often, in seconds, the plugin fetches the latest spa state from the ControlMySpa cloud. Default is 60, minimum is 30."
           },

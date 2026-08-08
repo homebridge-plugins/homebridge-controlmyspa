@@ -16,6 +16,11 @@ import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js'
 
 const DEFAULT_REFRESH_RATE = 60
 const MINIMUM_REFRESH_RATE = 30
+// A Node timer holds its delay in a signed 32-bit integer, so anything over
+// 2147483647 ms is not an error - it quietly becomes 1 ms. Left unchecked, a
+// refreshRate past this point would poll the ControlMySpa cloud a thousand
+// times a second rather than once every few weeks.
+const MAXIMUM_REFRESH_RATE = 2073600
 
 /**
  * HomebridgePlatform
@@ -322,11 +327,14 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
 
   async getPlatformRateSettings() {
     const configured = this.config.options?.refreshRate
-    this.refreshRate = typeof configured === 'number' && configured >= MINIMUM_REFRESH_RATE
+    this.refreshRate = typeof configured === 'number' && configured >= MINIMUM_REFRESH_RATE && configured <= MAXIMUM_REFRESH_RATE
       ? configured
       : DEFAULT_REFRESH_RATE
     if (typeof configured === 'number' && configured < MINIMUM_REFRESH_RATE) {
       await this.warnLog(`Configured refreshRate of ${configured}s is below the minimum of ${MINIMUM_REFRESH_RATE}s, using ${DEFAULT_REFRESH_RATE}s`)
+    }
+    if (typeof configured === 'number' && configured > MAXIMUM_REFRESH_RATE) {
+      await this.warnLog(`Configured refreshRate of ${configured}s is above the maximum of ${MAXIMUM_REFRESH_RATE}s, using ${DEFAULT_REFRESH_RATE}s`)
     }
   }
 
