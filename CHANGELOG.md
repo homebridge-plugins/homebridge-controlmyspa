@@ -7,6 +7,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 ### Changed
 
 - fix: keep debug warnings, errors and successes out of the log unless debug is on
+- chore(deps): dependency updates
 
 ## v1.1.1 (2026-08-09)
 
