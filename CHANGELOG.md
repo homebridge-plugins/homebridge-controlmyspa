@@ -2,6 +2,12 @@
 
 All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be documented in this file.
 
+## v1.1.3 (Pending Release)
+
+### Changed
+
+- fix(schema): require the plugin logging level to drop the duplicate none entry
+
 ## v1.1.2 (2026-08-13)
 
 ### Changed
