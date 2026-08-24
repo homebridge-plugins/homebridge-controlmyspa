@@ -174,15 +174,19 @@ export class ControlMySpaClient {
   }
 
   /**
-   * Set a jet pump, blower or light on a numbered port to OFF or HIGH.
+   * Set a jet pump, blower or light on a numbered port to a named state.
    * The dashboard reports ports as strings but the command api validates
    * deviceNumber as a number, so it is converted here.
+   *
+   * `LOW` is only ever sent for a component whose dashboard entry lists it in
+   * `availableValues` - an owner's two-speed pumps report OFF/LOW/HIGH there,
+   * and their pump sitting at LOW proves the state is real (#7).
    */
-  public async setComponentState(spaId: string, componentType: 'jet' | 'blower' | 'light', deviceNumber: string, on: boolean): Promise<void> {
+  public async setComponentState(spaId: string, componentType: 'jet' | 'blower' | 'light', deviceNumber: string, state: 'OFF' | 'LOW' | 'HIGH'): Promise<void> {
     await this.command('component-state', spaId, {
       deviceNumber: Number.parseInt(deviceNumber, 10),
       componentType,
-      state: on ? 'HIGH' : 'OFF',
+      state,
     })
   }
 

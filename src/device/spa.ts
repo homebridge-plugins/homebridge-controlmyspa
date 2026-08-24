@@ -17,6 +17,61 @@ const COMMAND_SETTLE_MS = 6000
 // The component types we can control, each becoming its own service
 const CONTROLLABLE_TYPES = ['PUMP', 'BLOWER', 'LIGHT']
 
+// How long to wait for the other half of a paired Active + RotationSpeed
+// write before sending one command for both - see queueFanWrite
+const FAN_WRITE_COALESCE_MS = 50
+
+/**
+ * Whether a component gets the two-speed fan treatment: it reports a LOW
+ * state of its own (#7 - an owner's pumps report OFF/LOW/HIGH, and one was
+ * sitting at LOW). A light never does, whatever it reports.
+ * @param component - the dashboard component entry
+ */
+export function isTwoSpeedComponent(component: CmsComponent): boolean {
+  return component.componentType !== 'LIGHT' && (component.availableValues ?? []).includes('LOW')
+}
+
+/**
+ * The single state to send for a batch of fan writes. HomeKit sends "turn on
+ * at half speed" as two writes, Active and RotationSpeed, and their handlers
+ * run concurrently - sending a command for each would race, with the spa
+ * keeping whichever landed last. One command carries the combined intent.
+ *
+ * An Active-on with no speed alongside it means the tile was toggled - full
+ * speed, which is what the owner asked the toggle to mean (#7).
+ * @param write - the parts that arrived within the window
+ * @param write.active - the Active write, when one arrived
+ * @param write.speed - the RotationSpeed write, when one arrived
+ */
+export function fanWriteTarget(write: { active?: boolean, speed?: number }): 'OFF' | 'LOW' | 'HIGH' {
+  if (write.active === false) {
+    return 'OFF'
+  }
+  if (write.speed !== undefined) {
+    if (write.speed <= 0) {
+      return 'OFF'
+    }
+    return write.speed <= 50 ? 'LOW' : 'HIGH'
+  }
+  return 'HIGH'
+}
+
+/**
+ * What a reported component value means for the fan characteristics. The
+ * speed is null for OFF so the slider keeps its last position, the way
+ * HomeKit fans conventionally behave.
+ * @param value - the component's reported value
+ */
+export function fanStateForValue(value: string | null | undefined): { active: boolean, speed: number | null } {
+  if (value === 'LOW') {
+    return { active: true, speed: 50 }
+  }
+  if (value !== undefined && value !== null && value !== 'OFF') {
+    return { active: true, speed: 100 }
+  }
+  return { active: false, speed: null }
+}
+
 /**
  * One HomeKit accessory per spa: a heat-only thermostat for the water, a
  * switch per jet pump and blower, a light bulb per spa light, and an
@@ -31,6 +86,13 @@ export class SpaAccessory {
   public readonly displayName: string
   private dashboard: CmsDashboard = {}
   private componentCapabilitiesLogged = false
+  private readonly pendingFanWrites = new Map<string, {
+    write: { active?: boolean, speed?: number }
+    promise: Promise<void>
+    resolve: () => void
+    reject: (reason: unknown) => void
+  }>()
+
   private settleTimer?: ReturnType<typeof setTimeout>
   private lastFaultMessage?: string
 
@@ -132,14 +194,43 @@ export class SpaAccessory {
       }
 
       const name = this.componentDisplayName(component)
-      const serviceType = component.componentType === 'LIGHT' ? Service.Lightbulb : Service.Switch
+      const twoSpeed = isTwoSpeedComponent(component)
+      const serviceType = component.componentType === 'LIGHT'
+        ? Service.Lightbulb
+        : twoSpeed ? Service.Fanv2 : Service.Switch
+
+      // A pump can change shape between restarts (the fan treatment arrived in
+      // an update, or a config change at the spa) - drop the old service so
+      // the accessory does not carry a dead tile alongside the live one
+      const staleType = serviceType === Service.Fanv2 ? Service.Switch : Service.Fanv2
+      const stale = this.accessory.getServiceById(staleType, subtype)
+      if (stale && component.componentType !== 'LIGHT') {
+        this.accessory.removeService(stale)
+      }
+
       const service = this.accessory.getServiceById(serviceType, subtype)
         ?? this.accessory.addService(serviceType, name, subtype)
       service.setCharacteristic(this.platform.hap.Characteristic.Name, name)
-      service
-        .getCharacteristic(this.platform.hap.Characteristic.On)
-        .onGet(() => this.componentIsOn(component.componentType, component.port))
-        .onSet(value => this.setComponentState(component.componentType, component.port, value === true))
+
+      if (twoSpeed) {
+        const { Characteristic } = this.platform.hap
+        service
+          .getCharacteristic(Characteristic.Active)
+          .onGet(() => this.componentIsOn(component.componentType, component.port)
+            ? Characteristic.Active.ACTIVE
+            : Characteristic.Active.INACTIVE)
+          .onSet(value => this.queueFanWrite(component, { active: value === Characteristic.Active.ACTIVE }))
+        service
+          .getCharacteristic(Characteristic.RotationSpeed)
+          .setProps({ minValue: 0, maxValue: 100, minStep: 50 })
+          .onGet(() => fanStateForValue(this.findComponent(component.componentType, component.port)?.value).speed ?? 0)
+          .onSet(value => this.queueFanWrite(component, { speed: value as number }))
+      } else {
+        service
+          .getCharacteristic(this.platform.hap.Characteristic.On)
+          .onGet(() => this.componentIsOn(component.componentType, component.port))
+          .onSet(value => this.setComponentState(component.componentType, component.port, value === true ? 'HIGH' : 'OFF'))
+      }
       this.componentServices.set(subtype, service)
     }
 
@@ -268,21 +359,53 @@ export class SpaAccessory {
     }
   }
 
-  private async setComponentState(componentType: string, port: string | null | undefined, on: boolean) {
+  private async setComponentState(componentType: string, port: string | null | undefined, state: 'OFF' | 'LOW' | 'HIGH') {
     const devicePort = port ?? '0'
     const apiType = ({ PUMP: 'jet', BLOWER: 'blower', LIGHT: 'light' } as const)[componentType] ?? 'jet'
     try {
-      await this.platform.client!.setComponentState(this.spaId, apiType, devicePort, on)
-      await this.platform.infoLog(`${this.accessory.displayName} setting ${componentType.toLowerCase()} ${devicePort} to ${on ? 'on' : 'off'}`)
+      await this.platform.client!.setComponentState(this.spaId, apiType, devicePort, state)
+      await this.platform.infoLog(`${this.accessory.displayName} setting ${componentType.toLowerCase()} ${devicePort} to ${state.toLowerCase()}`)
       const component = this.findComponent(componentType, port)
       if (component) {
-        component.value = on ? 'HIGH' : 'OFF'
+        component.value = state
       }
       this.schedulePostCommandRefresh()
     } catch (e: any) {
       await this.platform.reportCloudFailure(`${this.accessory.displayName} failed to set ${componentType.toLowerCase()} state`, e)
       throw new this.platform.hap.HapStatusError(this.platform.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE)
     }
+  }
+
+  /**
+   * Collect the Active and RotationSpeed halves of a fan write and send one
+   * command for both - see fanWriteTarget for why they cannot be sent
+   * separately. Each caller's promise settles when the single command does,
+   * so HomeKit sees both writes succeed or fail together.
+   * @param component - the two-speed component being written
+   * @param patch - the half that just arrived
+   * @param patch.active - the Active write, when this is one
+   * @param patch.speed - the RotationSpeed write, when this is one
+   */
+  private queueFanWrite(component: CmsComponent, patch: { active?: boolean, speed?: number }): Promise<void> {
+    const subtype = this.componentSubtype(component)
+    let pending = this.pendingFanWrites.get(subtype)
+    if (!pending) {
+      let resolve!: () => void
+      let reject!: (reason: unknown) => void
+      const promise = new Promise<void>((res, rej) => {
+        resolve = res
+        reject = rej
+      })
+      pending = { write: {}, promise, resolve, reject }
+      this.pendingFanWrites.set(subtype, pending)
+      setTimeout(() => {
+        this.pendingFanWrites.delete(subtype)
+        this.setComponentState(component.componentType, component.port, fanWriteTarget(pending!.write))
+          .then(pending!.resolve, pending!.reject)
+      }, FAN_WRITE_COALESCE_MS)
+    }
+    Object.assign(pending.write, patch)
+    return pending.promise
   }
 
   private async setPanelLock(value: CharacteristicValue) {
@@ -367,7 +490,18 @@ export class SpaAccessory {
 
     for (const component of this.controllableComponents()) {
       const service = this.componentServices.get(this.componentSubtype(component))
-      service?.updateCharacteristic(Characteristic.On, this.componentIsOn(component.componentType, component.port))
+      if (!service) {
+        continue
+      }
+      if (isTwoSpeedComponent(component)) {
+        const { active, speed } = fanStateForValue(component.value)
+        service.updateCharacteristic(Characteristic.Active, active ? Characteristic.Active.ACTIVE : Characteristic.Active.INACTIVE)
+        if (speed !== null) {
+          service.updateCharacteristic(Characteristic.RotationSpeed, speed)
+        }
+      } else {
+        service.updateCharacteristic(Characteristic.On, this.componentIsOn(component.componentType, component.port))
+      }
     }
 
     if (this.panelLockService) {
