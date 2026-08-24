@@ -56,35 +56,37 @@ export function fanWriteTarget(write: { active?: boolean, speed?: number }): 'OF
   return 'HIGH'
 }
 
-// The pause between the two commands of a stepped transition. The owner's
+// The pause between consecutive commands to the same component. The owner's
 // suggestion (#7): the pump is real machinery mid-spin, and rapid state
 // flips short-cycle it - give each state a few seconds to take.
 export const TRANSITION_STEP_DELAY_MS = 4000
 
+// The spa's control cycle. Its button only advances: off -> low -> high -> off
+const PUMP_CYCLE: Array<'OFF' | 'LOW' | 'HIGH'> = ['OFF', 'LOW', 'HIGH']
+
 /**
- * The command(s) to send to move a two-speed pump between states.
+ * The next single command to send to move a two-speed pump toward `target`,
+ * or null when it is already there.
  *
- * The spa's own control cycles OFF -> LOW -> HIGH and cannot step backwards,
- * and the cloud follows the hardware: asking for OFF while at LOW was
- * observed to leave the pump at HIGH - the cycle's next stop - rather than
- * off (#7). So that one transition is sent as its two real steps, HIGH then
- * OFF, with a pause between them.
- *
- * ⚠️ Deliberately ONLY that transition. Every other jump, including
- * HIGH -> LOW and OFF -> HIGH, behaved as a direct set in the owner's
- * testing, so they stay single commands until evidence says otherwise -
- * stepping them too would add seconds of delay on guesswork.
+ * Round three of #7 established that the cloud moves the pump AT MOST ONE
+ * step around its cycle per command, whatever state the command names:
+ * asking for HIGH from OFF landed on LOW, and asking for OFF from LOW landed
+ * on HIGH. So every transition is walked one cycle-step at a time, each
+ * command naming the very state that step reaches - which is also the only
+ * thing the hardware can do, so nothing is asked of it that it cannot honour.
  * @param current - the state the pump is reported at now
- * @param target - the state the write asks for
+ * @param target - the state the write is aiming for
  */
-export function stepsForTransition(current: string | null | undefined, target: 'OFF' | 'LOW' | 'HIGH'): Array<'OFF' | 'LOW' | 'HIGH'> {
+export function nextStepToward(current: string | null | undefined, target: 'OFF' | 'LOW' | 'HIGH'): 'OFF' | 'LOW' | 'HIGH' | null {
   if (current === target) {
-    return []
+    return null
   }
-  if (current === 'LOW' && target === 'OFF') {
-    return ['HIGH', 'OFF']
+  const position = PUMP_CYCLE.indexOf(current as 'OFF' | 'LOW' | 'HIGH')
+  if (position === -1) {
+    // Where the pump is now is unknown - send the target and let the poll sort it out
+    return target
   }
-  return [target]
+  return PUMP_CYCLE[(position + 1) % PUMP_CYCLE.length]
 }
 
 /**
@@ -124,8 +126,13 @@ export class SpaAccessory {
     reject: (reason: unknown) => void
   }>()
 
-  /** In-flight second steps of stepped transitions, cancellable per component */
-  private readonly activeWalks = new Map<string, { cancelled: boolean }>()
+  /** One paced driver per two-speed component - see walkToState */
+  private readonly pumpDrivers = new Map<string, {
+    target: 'OFF' | 'LOW' | 'HIGH'
+    lastSentAt: number
+    timer: ReturnType<typeof setTimeout> | null
+    waiters: Array<{ resolve: () => void, reject: (reason: unknown) => void }>
+  }>()
 
   private settleTimer?: ReturnType<typeof setTimeout>
   private lastFaultMessage?: string
@@ -394,42 +401,78 @@ export class SpaAccessory {
   }
 
   /**
-   * Send the command(s) that take a two-speed component to `target`, stepping
-   * through the spa's own cycle where a direct jump does not work - see
-   * stepsForTransition. The returned promise settles on the FIRST command, so
-   * HomeKit gets its answer promptly; any remaining step runs on afterwards,
-   * and a newer write for the same component cancels it - the user changed
-   * their mind, and the newer walk starts from wherever the pump now is.
+   * Drive a two-speed component toward `target`, one cycle-step per command,
+   * never faster than one command per few seconds - see nextStepToward for
+   * the one-step rule and TRANSITION_STEP_DELAY_MS for the pacing.
+   *
+   * A newer write simply replaces the target: the driver keeps walking from
+   * wherever the pump is, at the same pace. That pacing is also what fixed
+   * the round-three mystery of one pump obeying and the other not - the Home
+   * app can deliver Active and RotationSpeed as separate writes far enough
+   * apart to miss the coalescing window, and the second one used to cancel
+   * the first's follow-up step and fire immediately, machine-gunning the
+   * pump with commands fractions of a second apart.
+   *
+   * The returned promise settles with the first command this intent causes,
+   * so HomeKit gets a prompt answer; later steps run on behind.
    * @param component - the component being written
-   * @param subtype - its service subtype, the key for cancellation
+   * @param subtype - its service subtype, the driver key
    * @param target - the state the user asked for
    */
-  private async walkToState(component: CmsComponent, subtype: string, target: 'OFF' | 'LOW' | 'HIGH'): Promise<void> {
-    this.activeWalks.delete(subtype)
-    const steps = stepsForTransition(this.findComponent(component.componentType, component.port)?.value, target)
-    if (steps.length === 0) {
+  private walkToState(component: CmsComponent, subtype: string, target: 'OFF' | 'LOW' | 'HIGH'): Promise<void> {
+    let driver = this.pumpDrivers.get(subtype)
+    if (!driver) {
+      driver = { target, lastSentAt: 0, timer: null, waiters: [] }
+      this.pumpDrivers.set(subtype, driver)
+    }
+    driver.target = target
+
+    const promise = new Promise<void>((resolve, reject) => {
+      driver!.waiters.push({ resolve, reject })
+    })
+
+    if (!driver.timer) {
+      const wait = Math.max(0, driver.lastSentAt + TRANSITION_STEP_DELAY_MS - Date.now())
+      this.scheduleDriverStep(component, subtype, wait)
+    }
+    return promise
+  }
+
+  private scheduleDriverStep(component: CmsComponent, subtype: string, wait: number): void {
+    const driver = this.pumpDrivers.get(subtype)
+    if (!driver) {
       return
     }
-
-    await this.setComponentState(component.componentType, component.port, steps[0])
-
-    if (steps.length > 1) {
-      const walk = { cancelled: false }
-      this.activeWalks.set(subtype, walk)
-      void this.platform.infoLog(
-        `${this.accessory.displayName} stepping ${this.componentDisplayName(component)} through `
-        + `${steps[0].toLowerCase()} to reach ${target.toLowerCase()} - the spa cannot jump there directly`,
-      )
-      setTimeout(() => {
-        if (walk.cancelled) {
+    driver.timer = setTimeout(() => {
+      driver.timer = null
+      void (async () => {
+        const current = this.findComponent(component.componentType, component.port)?.value
+        const step = nextStepToward(current, driver.target)
+        const waiters = driver.waiters
+        driver.waiters = []
+        if (step === null) {
+          waiters.forEach(waiter => waiter.resolve())
           return
         }
-        this.activeWalks.delete(subtype)
-        this.setComponentState(component.componentType, component.port, steps[1]).catch(async (e) => {
-          await this.platform.errorLog(`${this.accessory.displayName} failed the second step of a pump transition: ${e.message}`)
-        })
-      }, TRANSITION_STEP_DELAY_MS)
-    }
+        if (step !== driver.target) {
+          void this.platform.infoLog(
+            `${this.accessory.displayName} stepping ${this.componentDisplayName(component)} to `
+            + `${step.toLowerCase()} on the way to ${driver.target.toLowerCase()} - the spa moves one step at a time`,
+          )
+        }
+        driver.lastSentAt = Date.now()
+        try {
+          await this.setComponentState(component.componentType, component.port, step)
+          waiters.forEach(waiter => waiter.resolve())
+        } catch (e) {
+          waiters.forEach(waiter => waiter.reject(e))
+          return
+        }
+        if (this.findComponent(component.componentType, component.port)?.value !== driver.target) {
+          this.scheduleDriverStep(component, subtype, TRANSITION_STEP_DELAY_MS)
+        }
+      })()
+    }, wait)
   }
 
   private async setComponentState(componentType: string, port: string | null | undefined, state: 'OFF' | 'LOW' | 'HIGH') {
@@ -461,13 +504,6 @@ export class SpaAccessory {
    */
   private queueFanWrite(component: CmsComponent, patch: { active?: boolean, speed?: number }): Promise<void> {
     const subtype = this.componentSubtype(component)
-    // A fresh write supersedes the tail of any stepped transition still
-    // pending - the user changed their mind mid-walk
-    const walk = this.activeWalks.get(subtype)
-    if (walk) {
-      walk.cancelled = true
-      this.activeWalks.delete(subtype)
-    }
     let pending = this.pendingFanWrites.get(subtype)
     if (!pending) {
       let resolve!: () => void

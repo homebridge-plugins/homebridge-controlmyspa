@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fanStateForValue, fanWriteTarget, isTwoSpeedComponent, stepsForTransition } from './spa.js'
+import { fanStateForValue, fanWriteTarget, isTwoSpeedComponent, nextStepToward } from './spa.js'
 
 /**
  * The decision logic behind the two-speed pump support (#7). The owner's spa
@@ -64,35 +64,34 @@ describe('the single command a batch of fan writes becomes', () => {
 })
 
 /**
- * ⚠️ The bug this pins (#7, second round): asking for OFF while at LOW left
- * the pump at HIGH. The spa's control cycles OFF -> LOW -> HIGH and cannot
- * step backwards, so that one transition has to be sent as its two real
- * steps. Everything else behaved as a direct set in the owner's testing and
- * must stay a single command - stepping is seconds of delay, not free.
+ * ⚠️ Round three of #7 settled the model: the cloud moves the pump AT MOST
+ * ONE step around its cycle (off -> low -> high -> off) per command, whatever
+ * the command names. Asking for HIGH from OFF landed on LOW; asking for OFF
+ * from LOW landed on HIGH. So the planner answers one question: what is the
+ * next single command toward the target?
  */
-describe('the steps a transition is sent as', () => {
-  it('off-from-low goes through high, the only route the spa has', () => {
-    expect(stepsForTransition('LOW', 'OFF')).toEqual(['HIGH', 'OFF'])
+describe('the next step toward a target state', () => {
+  it('walks off to full through low', () => {
+    expect(nextStepToward('OFF', 'HIGH')).toBe('LOW')
+    expect(nextStepToward('LOW', 'HIGH')).toBe('HIGH')
   })
 
-  it('off-from-high is direct, as tested', () => {
-    expect(stepsForTransition('HIGH', 'OFF')).toEqual(['OFF'])
+  it('walks low to off through high', () => {
+    expect(nextStepToward('LOW', 'OFF')).toBe('HIGH')
+    expect(nextStepToward('HIGH', 'OFF')).toBe('OFF')
   })
 
-  it('full-from-off is direct, as tested', () => {
-    expect(stepsForTransition('OFF', 'HIGH')).toEqual(['HIGH'])
+  it('walks full to half the long way round, the only way there is', () => {
+    expect(nextStepToward('HIGH', 'LOW')).toBe('OFF')
+    expect(nextStepToward('OFF', 'LOW')).toBe('LOW')
   })
 
-  it('half-from-full is direct, as tested', () => {
-    expect(stepsForTransition('HIGH', 'LOW')).toEqual(['LOW'])
+  it('sends nothing when the pump is already there', () => {
+    expect(nextStepToward('HIGH', 'HIGH')).toBeNull()
   })
 
-  it('asking for the state it is already at sends nothing', () => {
-    expect(stepsForTransition('LOW', 'LOW')).toEqual([])
-  })
-
-  it('an unknown current state sends the target directly rather than guessing a route', () => {
-    expect(stepsForTransition(undefined, 'OFF')).toEqual(['OFF'])
+  it('sends the target directly when the current state is unknown', () => {
+    expect(nextStepToward(undefined, 'OFF')).toBe('OFF')
   })
 })
 
