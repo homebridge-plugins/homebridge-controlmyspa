@@ -30,6 +30,7 @@ export class SpaAccessory {
   public readonly spaId: string
   public readonly displayName: string
   private dashboard: CmsDashboard = {}
+  private componentCapabilitiesLogged = false
   private settleTimer?: ReturnType<typeof setTimeout>
   private lastFaultMessage?: string
 
@@ -157,6 +158,36 @@ export class SpaAccessory {
         this.accessory.removeService(service)
         this.componentServices.delete(subtype)
       }
+    }
+  }
+
+  /**
+   * Say once, in the debug log, what the spa reports for each controllable
+   * component - name, current value, and every value it says it accepts.
+   *
+   * This exists for #7: an owner's two-speed pumps needed pressing twice to
+   * reach full speed, which suggests the api knows more states than the
+   * OFF/HIGH this plugin sends. Whether that is true is written in
+   * `availableValues`, which nothing surfaced - so the question could not be
+   * answered from any log an owner could produce.
+   */
+  private logComponentCapabilitiesOnce() {
+    if (this.componentCapabilitiesLogged) {
+      return
+    }
+    const components = this.controllableComponents()
+    if (components.length === 0) {
+      // A partial dashboard - keep waiting for one that lists them
+      return
+    }
+    this.componentCapabilitiesLogged = true
+    for (const component of components) {
+      const available = component.availableValues?.length ? component.availableValues.join('/') : 'not reported'
+      void this.platform.debugLog(
+        `${this.accessory.displayName} component ${this.componentDisplayName(component)}`
+        + ` (${component.componentType.toLowerCase()} port ${component.port})`
+        + ` value [${component.value ?? 'none'}] accepts [${available}]`,
+      )
     }
   }
 
@@ -305,6 +336,8 @@ export class SpaAccessory {
   public updateFromDashboard(dashboard: CmsDashboard) {
     this.dashboard = dashboard
     const { Characteristic } = this.platform.hap
+
+    this.logComponentCapabilitiesOnce()
 
     // Surface a spa fault the first time it appears
     const fault = typeof dashboard.currentFaultMessage === 'string' ? dashboard.currentFaultMessage : undefined

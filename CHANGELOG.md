@@ -7,6 +7,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 ### Changed
 
 - fix(schema): require the plugin logging level to drop the duplicate none entry
+- feat: log what the spa reports each pump, blower and light can do, so multi-speed support can be worked out
 
 ## v1.1.2 (2026-08-13)
 
