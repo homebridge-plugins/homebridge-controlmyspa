@@ -2,6 +2,12 @@
 
 All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be documented in this file.
 
+## v1.2.1 (Pending Release)
+
+### Changed
+
+- fix: step a pump from low to off through high, the only route the spa's own control has
+
 ## v1.2.0 (2026-08-24)
 
 ### Changed

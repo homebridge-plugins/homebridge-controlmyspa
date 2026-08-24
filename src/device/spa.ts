@@ -56,6 +56,37 @@ export function fanWriteTarget(write: { active?: boolean, speed?: number }): 'OF
   return 'HIGH'
 }
 
+// The pause between the two commands of a stepped transition. The owner's
+// suggestion (#7): the pump is real machinery mid-spin, and rapid state
+// flips short-cycle it - give each state a few seconds to take.
+export const TRANSITION_STEP_DELAY_MS = 4000
+
+/**
+ * The command(s) to send to move a two-speed pump between states.
+ *
+ * The spa's own control cycles OFF -> LOW -> HIGH and cannot step backwards,
+ * and the cloud follows the hardware: asking for OFF while at LOW was
+ * observed to leave the pump at HIGH - the cycle's next stop - rather than
+ * off (#7). So that one transition is sent as its two real steps, HIGH then
+ * OFF, with a pause between them.
+ *
+ * ⚠️ Deliberately ONLY that transition. Every other jump, including
+ * HIGH -> LOW and OFF -> HIGH, behaved as a direct set in the owner's
+ * testing, so they stay single commands until evidence says otherwise -
+ * stepping them too would add seconds of delay on guesswork.
+ * @param current - the state the pump is reported at now
+ * @param target - the state the write asks for
+ */
+export function stepsForTransition(current: string | null | undefined, target: 'OFF' | 'LOW' | 'HIGH'): Array<'OFF' | 'LOW' | 'HIGH'> {
+  if (current === target) {
+    return []
+  }
+  if (current === 'LOW' && target === 'OFF') {
+    return ['HIGH', 'OFF']
+  }
+  return [target]
+}
+
 /**
  * What a reported component value means for the fan characteristics. The
  * speed is null for OFF so the slider keeps its last position, the way
@@ -92,6 +123,9 @@ export class SpaAccessory {
     resolve: () => void
     reject: (reason: unknown) => void
   }>()
+
+  /** In-flight second steps of stepped transitions, cancellable per component */
+  private readonly activeWalks = new Map<string, { cancelled: boolean }>()
 
   private settleTimer?: ReturnType<typeof setTimeout>
   private lastFaultMessage?: string
@@ -359,6 +393,45 @@ export class SpaAccessory {
     }
   }
 
+  /**
+   * Send the command(s) that take a two-speed component to `target`, stepping
+   * through the spa's own cycle where a direct jump does not work - see
+   * stepsForTransition. The returned promise settles on the FIRST command, so
+   * HomeKit gets its answer promptly; any remaining step runs on afterwards,
+   * and a newer write for the same component cancels it - the user changed
+   * their mind, and the newer walk starts from wherever the pump now is.
+   * @param component - the component being written
+   * @param subtype - its service subtype, the key for cancellation
+   * @param target - the state the user asked for
+   */
+  private async walkToState(component: CmsComponent, subtype: string, target: 'OFF' | 'LOW' | 'HIGH'): Promise<void> {
+    this.activeWalks.delete(subtype)
+    const steps = stepsForTransition(this.findComponent(component.componentType, component.port)?.value, target)
+    if (steps.length === 0) {
+      return
+    }
+
+    await this.setComponentState(component.componentType, component.port, steps[0])
+
+    if (steps.length > 1) {
+      const walk = { cancelled: false }
+      this.activeWalks.set(subtype, walk)
+      void this.platform.infoLog(
+        `${this.accessory.displayName} stepping ${this.componentDisplayName(component)} through `
+        + `${steps[0].toLowerCase()} to reach ${target.toLowerCase()} - the spa cannot jump there directly`,
+      )
+      setTimeout(() => {
+        if (walk.cancelled) {
+          return
+        }
+        this.activeWalks.delete(subtype)
+        this.setComponentState(component.componentType, component.port, steps[1]).catch(async (e) => {
+          await this.platform.errorLog(`${this.accessory.displayName} failed the second step of a pump transition: ${e.message}`)
+        })
+      }, TRANSITION_STEP_DELAY_MS)
+    }
+  }
+
   private async setComponentState(componentType: string, port: string | null | undefined, state: 'OFF' | 'LOW' | 'HIGH') {
     const devicePort = port ?? '0'
     const apiType = ({ PUMP: 'jet', BLOWER: 'blower', LIGHT: 'light' } as const)[componentType] ?? 'jet'
@@ -388,6 +461,13 @@ export class SpaAccessory {
    */
   private queueFanWrite(component: CmsComponent, patch: { active?: boolean, speed?: number }): Promise<void> {
     const subtype = this.componentSubtype(component)
+    // A fresh write supersedes the tail of any stepped transition still
+    // pending - the user changed their mind mid-walk
+    const walk = this.activeWalks.get(subtype)
+    if (walk) {
+      walk.cancelled = true
+      this.activeWalks.delete(subtype)
+    }
     let pending = this.pendingFanWrites.get(subtype)
     if (!pending) {
       let resolve!: () => void
@@ -400,7 +480,7 @@ export class SpaAccessory {
       this.pendingFanWrites.set(subtype, pending)
       setTimeout(() => {
         this.pendingFanWrites.delete(subtype)
-        this.setComponentState(component.componentType, component.port, fanWriteTarget(pending!.write))
+        this.walkToState(component, subtype, fanWriteTarget(pending!.write))
           .then(pending!.resolve, pending!.reject)
       }, FAN_WRITE_COALESCE_MS)
     }
