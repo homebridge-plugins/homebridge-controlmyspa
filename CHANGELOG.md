@@ -8,6 +8,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 
 - fix: step a pump from low to off through high, the only route the spa's own control has
 - fix: walk every pump transition one cycle step at a time, with a pause between commands
+- chore(deps): dependency updates
 
 ## v1.2.0 (2026-08-24)
 
