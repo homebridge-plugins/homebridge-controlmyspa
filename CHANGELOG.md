@@ -6,7 +6,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 
 ### Changed
 
-- ci: update github actions to their latest versions
+- ci: update github actions to their latest versions (#27)
 
 ## v1.2.2 (2026-10-18)
 
