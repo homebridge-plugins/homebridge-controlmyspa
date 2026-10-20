@@ -106,3 +106,31 @@ describe('a default install, from the settings it actually works out', () => {
     expect(log.info).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * The config UI now saves 'default' for the "Default" logging choice, because
+ * a required field that defaults to an empty string always failed the UI's
+ * validation. 'default' has to behave exactly as an empty or missing value
+ * always has: follow Homebridge's own debug setting.
+ */
+describe('the default logging choice', () => {
+  async function platformLoggingFor(options: Record<string, unknown>) {
+    const host: any = Object.create(ControlMySpaPlatform.prototype)
+    host.log = makeLog()
+    host.config = { options }
+    await host.getPlatformLogSettings()
+    return host.platformLogging
+  }
+
+  it('resolves the plugin level the same as an empty or missing one', async () => {
+    const missing = await platformLoggingFor({})
+
+    expect(await platformLoggingFor({ logging: 'default' })).toBe(missing)
+    expect(await platformLoggingFor({ logging: '' })).toBe(missing)
+    expect(missing).toBe('debugMode')
+  })
+
+  it('still honours an explicit level', async () => {
+    expect(await platformLoggingFor({ logging: 'standard' })).toBe('standard')
+  })
+})
