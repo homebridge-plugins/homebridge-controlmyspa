@@ -113,7 +113,9 @@ export interface CmsDashboard {
  * on this api and returns undefined.
  */
 export function fahrenheitToCelsius(value: string | number | null | undefined): number | undefined {
-  const parsed = typeof value === 'string' ? Number.parseFloat(value) : value ?? undefined
+  const parsed = typeof value === 'string'
+    ? Number.parseFloat(value)
+    : value ?? undefined
   if (parsed === undefined || Number.isNaN(parsed) || parsed === 0) {
     return undefined
   }

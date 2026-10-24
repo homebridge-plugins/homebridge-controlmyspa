@@ -51,7 +51,9 @@ export function fanWriteTarget(write: { active?: boolean, speed?: number }): 'OF
     if (write.speed <= 0) {
       return 'OFF'
     }
-    return write.speed <= 50 ? 'LOW' : 'HIGH'
+    return write.speed <= 50
+      ? 'LOW'
+      : 'HIGH'
   }
   return 'HIGH'
 }
@@ -173,14 +175,18 @@ export class SpaAccessory {
 
     this.thermostatService
       .getCharacteristic(Characteristic.CurrentHeatingCoolingState)
-      .setProps({ validValues: [Characteristic.CurrentHeatingCoolingState.OFF, Characteristic.CurrentHeatingCoolingState.HEAT] })
+      .setProps({
+        validValues: [Characteristic.CurrentHeatingCoolingState.OFF, Characteristic.CurrentHeatingCoolingState.HEAT],
+      })
       .onGet(() => this.heaterModeIsReady()
         ? Characteristic.CurrentHeatingCoolingState.HEAT
         : Characteristic.CurrentHeatingCoolingState.OFF)
 
     this.thermostatService
       .getCharacteristic(Characteristic.TargetHeatingCoolingState)
-      .setProps({ validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT] })
+      .setProps({
+        validValues: [Characteristic.TargetHeatingCoolingState.OFF, Characteristic.TargetHeatingCoolingState.HEAT],
+      })
       .onGet(() => this.heaterModeIsReady()
         ? Characteristic.TargetHeatingCoolingState.HEAT
         : Characteristic.TargetHeatingCoolingState.OFF)
@@ -243,7 +249,9 @@ export class SpaAccessory {
       // A pump can change shape between restarts (the fan treatment arrived in
       // an update, or a config change at the spa) - drop the old service so
       // the accessory does not carry a dead tile alongside the live one
-      const staleType = serviceType === Service.Fanv2 ? Service.Switch : Service.Fanv2
+      const staleType = serviceType === Service.Fanv2
+        ? Service.Switch
+        : Service.Fanv2
       const stale = this.accessory.getServiceById(staleType, subtype)
       if (stale && component.componentType !== 'LIGHT') {
         this.accessory.removeService(stale)
@@ -270,7 +278,9 @@ export class SpaAccessory {
         service
           .getCharacteristic(this.platform.hap.Characteristic.On)
           .onGet(() => this.componentIsOn(component.componentType, component.port))
-          .onSet(value => this.setComponentState(component.componentType, component.port, value === true ? 'HIGH' : 'OFF'))
+          .onSet(value => this.setComponentState(component.componentType, component.port, value === true
+            ? 'HIGH'
+            : 'OFF'))
       }
       this.componentServices.set(subtype, service)
     }
@@ -314,7 +324,9 @@ export class SpaAccessory {
     }
     this.componentCapabilitiesLogged = true
     for (const component of components) {
-      const available = component.availableValues?.length ? component.availableValues.join('/') : 'not reported'
+      const available = component.availableValues?.length
+        ? component.availableValues.join('/')
+        : 'not reported'
       void this.platform.debugLog(
         `${this.accessory.displayName} component ${this.componentDisplayName(component)}`
         + ` (${component.componentType.toLowerCase()} port ${component.port})`
@@ -336,7 +348,9 @@ export class SpaAccessory {
     const ofType = this.controllableComponents().filter(c => c.componentType === component.componentType)
     const base = { PUMP: 'Jets', BLOWER: 'Blower', LIGHT: 'Spa Light' }[component.componentType] ?? component.componentType
     // Only number the service when the spa has more than one of that type
-    return ofType.length > 1 ? `${base} ${Number.parseInt(component.port!) + 1}` : base
+    return ofType.length > 1
+      ? `${base} ${Number.parseInt(component.port!) + 1}`
+      : base
   }
 
   private findComponent(componentType: string, port?: string | null): CmsComponent | undefined {
@@ -422,7 +436,12 @@ export class SpaAccessory {
   private walkToState(component: CmsComponent, subtype: string, target: 'OFF' | 'LOW' | 'HIGH'): Promise<void> {
     let driver = this.pumpDrivers.get(subtype)
     if (!driver) {
-      driver = { target, lastSentAt: 0, timer: null, waiters: [] }
+      driver = {
+        target,
+        lastSentAt: 0,
+        timer: null,
+        waiters: [],
+      }
       this.pumpDrivers.set(subtype, driver)
     }
     driver.target = target
@@ -579,7 +598,9 @@ export class SpaAccessory {
     this.logComponentCapabilitiesOnce()
 
     // Surface a spa fault the first time it appears
-    const fault = typeof dashboard.currentFaultMessage === 'string' ? dashboard.currentFaultMessage : undefined
+    const fault = typeof dashboard.currentFaultMessage === 'string'
+      ? dashboard.currentFaultMessage
+      : undefined
     if (fault && fault !== this.lastFaultMessage) {
       void this.platform.warnLog(`${this.accessory.displayName} is reporting a fault: ${fault}`)
     }
@@ -597,11 +618,15 @@ export class SpaAccessory {
     this.thermostatService.updateCharacteristic(Characteristic.TargetTemperature, this.targetTemperature())
     this.thermostatService.updateCharacteristic(
       Characteristic.CurrentHeatingCoolingState,
-      this.heaterModeIsReady() ? Characteristic.CurrentHeatingCoolingState.HEAT : Characteristic.CurrentHeatingCoolingState.OFF,
+      this.heaterModeIsReady()
+        ? Characteristic.CurrentHeatingCoolingState.HEAT
+        : Characteristic.CurrentHeatingCoolingState.OFF,
     )
     this.thermostatService.updateCharacteristic(
       Characteristic.TargetHeatingCoolingState,
-      this.heaterModeIsReady() ? Characteristic.TargetHeatingCoolingState.HEAT : Characteristic.TargetHeatingCoolingState.OFF,
+      this.heaterModeIsReady()
+        ? Characteristic.TargetHeatingCoolingState.HEAT
+        : Characteristic.TargetHeatingCoolingState.OFF,
     )
 
     for (const component of this.controllableComponents()) {

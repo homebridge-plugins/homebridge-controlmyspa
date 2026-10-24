@@ -8,6 +8,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 
 - ci: update github actions to their latest versions (#27)
 - fix(schema): give the default logging choice a value, so the ui stops flagging it as missing
+- chore(deps): dependency updates
 
 ## v1.2.2 (2026-10-18)
 

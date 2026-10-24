@@ -9,11 +9,17 @@ import { fanStateForValue, fanWriteTarget, isTwoSpeedComponent, nextStepToward }
  */
 describe('which components get the two-speed treatment', () => {
   it('a pump that reports LOW does', () => {
-    expect(isTwoSpeedComponent({ componentType: 'PUMP', availableValues: ['OFF', 'LOW', 'HIGH'] })).toBe(true)
+    expect(isTwoSpeedComponent({
+      componentType: 'PUMP',
+      availableValues: ['OFF', 'LOW', 'HIGH'],
+    })).toBe(true)
   })
 
   it('a pump that only reports OFF and HIGH stays a switch', () => {
-    expect(isTwoSpeedComponent({ componentType: 'PUMP', availableValues: ['OFF', 'HIGH'] })).toBe(false)
+    expect(isTwoSpeedComponent({
+      componentType: 'PUMP',
+      availableValues: ['OFF', 'HIGH'],
+    })).toBe(false)
   })
 
   it('a pump that reports nothing stays a switch', () => {
@@ -22,11 +28,17 @@ describe('which components get the two-speed treatment', () => {
 
   it('a light never does, whatever it reports', () => {
     // The owner's light reports OFF/HIGH, but guard the odd one out anyway
-    expect(isTwoSpeedComponent({ componentType: 'LIGHT', availableValues: ['OFF', 'LOW', 'HIGH'] })).toBe(false)
+    expect(isTwoSpeedComponent({
+      componentType: 'LIGHT',
+      availableValues: ['OFF', 'LOW', 'HIGH'],
+    })).toBe(false)
   })
 
   it('a blower that reports LOW gets it too', () => {
-    expect(isTwoSpeedComponent({ componentType: 'BLOWER', availableValues: ['OFF', 'LOW', 'HIGH'] })).toBe(true)
+    expect(isTwoSpeedComponent({
+      componentType: 'BLOWER',
+      availableValues: ['OFF', 'LOW', 'HIGH'],
+    })).toBe(true)
   })
 })
 

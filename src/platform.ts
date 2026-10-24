@@ -289,7 +289,10 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
       await this.debugLog(message)
       return
     }
-    this.cloudOutage = { since: Date.now(), suppressed: 0 }
+    this.cloudOutage = {
+      since: Date.now(),
+      suppressed: 0,
+    }
     await this.warnLog(`${message}. The ControlMySpa cloud is not responding, which is at their end rather than yours - this will not be repeated until it is back.`)
   }
 
@@ -303,7 +306,9 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
     const { since, suppressed } = this.cloudOutage
     this.cloudOutage = undefined
     const minutes = Math.max(1, Math.round((Date.now() - since) / 60000))
-    const alsoHidden = suppressed > 0 ? `, hiding ${suppressed} more of the same` : ''
+    const alsoHidden = suppressed > 0
+      ? `, hiding ${suppressed} more of the same`
+      : ''
     await this.successLog(`The ControlMySpa cloud is responding again after ${minutes} minute(s)${alsoHidden}`)
   }
 
@@ -323,7 +328,9 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
       : 'debugMode'
     // 'default' (what the config UI saves) is not one of the three above, so it
     // lands on 'debugMode' exactly as an empty or missing value does.
-    const logging = this.config.options?.logging && this.config.options.logging !== 'default' ? 'Platform Config' : 'Default'
+    const logging = this.config.options?.logging && this.config.options.logging !== 'default'
+      ? 'Platform Config'
+      : 'Default'
     await this.debugLog(`Using ${logging} Logging: ${this.platformLogging}`)
   }
 
