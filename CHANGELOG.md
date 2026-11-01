@@ -9,6 +9,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - ci: update github actions to their latest versions (#27)
 - fix(schema): give the default logging choice a value, so the ui stops flagging it as missing
 - chore(deps): dependency updates
+- docs: show two-speed pumps as fans, homebridge 1.11.4 support, and fix the readme links
 
 ## v1.2.2 (2026-10-18)
 
