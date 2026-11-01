@@ -8,7 +8,7 @@
 Homebridge plugin to integrate Balboa ControlMySpa hot tubs into HomeKit
 
 [![npm](https://img.shields.io/npm/v/@homebridge-plugins/homebridge-controlmyspa/latest?label=latest)](https://www.npmjs.com/package/@homebridge-plugins/homebridge-controlmyspa)
-[![npm](https://img.shields.io/npm/v/@homebridge-plugins/homebridge-controlmyspa/beta?label=beta)](https://github.com/homebridge/homebridge/wiki/How-to-Install-Alternate-Plugin-Versions)<br>
+[![npm](https://img.shields.io/npm/v/@homebridge-plugins/homebridge-controlmyspa/beta?label=beta)](https://github.com/homebridge-plugins/homebridge-controlmyspa/wiki/Beta-Version)<br>
 [![verified-by-homebridge](https://img.shields.io/badge/homebridge-verified-blueviolet?color=%23491F59&style=flat)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)<br>
 [![npm](https://img.shields.io/npm/dt/@homebridge-plugins/homebridge-controlmyspa)](https://www.npmjs.com/package/@homebridge-plugins/homebridge-controlmyspa)
 [![Discord](https://img.shields.io/discord/432663330281226270?color=728ED5&logo=discord&label=hb-discord)](https://discord.gg/bHjKNkN)
@@ -22,16 +22,16 @@ Homebridge plugin to integrate Balboa ControlMySpa hot tubs into HomeKit
   - connects to the ControlMySpa cloud, the same way the official mobile app does
   - exposes for each spa:
     - a thermostat for the water temperature and heater mode (READY/REST)
-    - a switch for each jet pump and blower
+    - a switch for each single-speed jet pump and blower, or a fan with a speed slider for two-speed ones
     - a light for each spa light
     - an optional lock for the spa's physical control panel
-- This plugin is for spas connected to the **ControlMySpa cloud**. If your Balboa spa uses a local WiFi module instead, [homebridge-balboa-spa](https://github.com/plasticrake/homebridge-balboa-spa) may suit better.
+- This plugin is for spas connected to the **ControlMySpa cloud**. If your Balboa spa uses a local WiFi module instead, [homebridge-balboa-spa](https://github.com/vincedarley/homebridge-plugin-bwaspa) may suit better.
 
 ### Prerequisites
 
 - To use this plugin, you will need to already have:
   - [Node](https://nodejs.org): latest version of `v22`, `v24` or `v26` - any other major version is not supported.
-  - [Homebridge](https://homebridge.io): `v2` - refer to link for more information and installation instructions.
+  - [Homebridge](https://homebridge.io): `v1.11.4` or above - refer to link for more information and installation instructions.
 
 ### Setup
 
