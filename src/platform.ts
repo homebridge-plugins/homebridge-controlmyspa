@@ -3,16 +3,48 @@
  * platform.ts: @homebridge-plugins/homebridge-controlmyspa
  */
 
-import type { API, DynamicPlatformPlugin, HAP, Logging, PlatformAccessory } from 'homebridge'
+import type { API, DynamicPlatformPlugin, HAP, Logging, MatterAccessory, PlatformAccessory } from 'homebridge'
 
 import type { CmsSpaSummary, ControlMySpaPlatformConfig, devicesConfig, options } from './settings.js'
 
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { URL } from 'node:url'
 
 import { ControlMySpaClient } from './controlmyspa.js'
 import { SpaAccessory } from './device/spa.js'
+import { SpaEnergyAccessory } from './device/spaEnergy.js'
+import { EnergyStore, estimatePower, maxGapFor, resolveWatts } from './energy.js'
+import { HistoryRecorder } from './history.js'
 import { PLATFORM_NAME, PLUGIN_NAME } from './settings.js'
+
+// The first Homebridge with the composed-accessory Matter fixes energy
+// reporting depends on (electrical clusters arrived in 2.2.0, but on 2.2.x
+// Apple Home stops responding to bridged Matter accessories after pairing)
+export const MINIMUM_MATTER_ENERGY_VERSION = '2.3.0'
+
+/**
+ * Whether a Homebridge version is at least `minimum`. Pre-release tags
+ * (2.3.0-beta.1) count as that release.
+ * @param version - the running Homebridge version
+ * @param minimum - the version required
+ */
+export function versionAtLeast(version: string | undefined, minimum: string): boolean {
+  const parse = (v: string) => v.split('-')[0].split('.').map(part => Number.parseInt(part, 10) || 0)
+  if (!version) {
+    return false
+  }
+  const have = parse(version)
+  const need = parse(minimum)
+  for (let i = 0; i < Math.max(have.length, need.length); i += 1) {
+    const a = have[i] ?? 0
+    const b = need[i] ?? 0
+    if (a !== b) {
+      return a > b
+    }
+  }
+  return true
+}
 
 const DEFAULT_REFRESH_RATE = 60
 const MINIMUM_REFRESH_RATE = 30
@@ -40,6 +72,11 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
   version: any
 
   private readonly spaHandlers = new Map<string, SpaAccessory>()
+  // Energy accessories (Matter), keyed by spa id
+  private readonly energyHandlers = new Map<string, SpaEnergyAccessory>()
+  private readonly matterAccessories: MatterAccessory[] = []
+  // History for the settings page dashboard, keyed by spa id
+  private readonly historyRecorders = new Map<string, HistoryRecorder>()
   private pollTimer?: ReturnType<typeof setInterval>
   private pollInFlight = false
   // Set while the cloud is failing to answer, so a run of identical failures is
@@ -101,7 +138,17 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
         clearInterval(this.pollTimer)
       }
       this.spaHandlers.forEach(handler => handler.shutdown())
+      this.energyHandlers.forEach(handler => handler.shutdown())
     })
+  }
+
+  /**
+   * This function is invoked when homebridge restores cached Matter accessories
+   * (the energy outlets) from disk at startup.
+   */
+  configureMatterAccessory(accessory: MatterAccessory) {
+    this.debugLog(`Loading Matter accessory from cache: ${accessory.displayName}`)
+    this.matterAccessories.push(accessory)
   }
 
   /**
@@ -161,6 +208,9 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
 
     this.removeStaleAccessories(configuredUUIDs)
 
+    await this.setupEnergy(spas)
+    this.setupHistory(spas)
+
     // Fetch each spa's live state straight away rather than waiting for
     // the first poll interval
     await this.pollNow()
@@ -207,6 +257,94 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
   }
 
   /**
+   * Start recording each spa's history for the dashboard on the settings page,
+   * unless the owner has turned it off
+   */
+  private setupHistory(spas: CmsSpaSummary[]) {
+    if (this.config.options?.recordHistory === false) {
+      return
+    }
+    for (const spa of spas) {
+      const deviceConfig = this.deviceConfigFor(spa)
+      if (deviceConfig.hide_device) {
+        continue
+      }
+      this.historyRecorders.set(spa._id, new HistoryRecorder(
+        this.api.user.storagePath(),
+        spa._id,
+        this.spaDisplayName(spa, deviceConfig),
+        message => void this.warnLog(message),
+      ))
+    }
+  }
+
+  /**
+   * Publish an estimated-energy outlet over Matter for each spa, when it is
+   * turned on and the bridge can carry it, and remove any cached energy
+   * outlet that is no longer wanted.
+   *
+   * Registration runs in the background: it can take a while for the bridge's
+   * Matter server to be ready, and the HomeKit accessories should not wait on
+   * it. Samples taken meanwhile are counted all the same.
+   */
+  private async setupEnergy(spas: CmsSpaSummary[]) {
+    const energy = this.config.options?.energy
+    const matter = this.api.matter
+    const wanted = new Set<string>()
+
+    if (energy?.enabled) {
+      if (!matter || !this.api.isMatterEnabled?.()) {
+        await this.warnLog('Energy reporting is turned on, but Matter is not enabled on the bridge this plugin runs on. '
+          + 'In the Homebridge UI, open this plugin\'s bridge settings, turn on "Enable Matter", then pair the bridge\'s Matter code with Apple Home.')
+      } else if (!versionAtLeast(this.api.serverVersion, MINIMUM_MATTER_ENERGY_VERSION)) {
+        await this.warnLog(`Energy reporting needs Homebridge ${MINIMUM_MATTER_ENERGY_VERSION} or later (this is ${this.api.serverVersion}), so it has been left off`)
+      } else {
+        const store = new EnergyStore(
+          join(this.api.user.storagePath(), 'controlmyspa', 'energy.json'),
+          message => void this.warnLog(message),
+        )
+        const watts = resolveWatts(energy)
+        await this.debugLog(`Energy estimate wattages: ${JSON.stringify(watts)}`)
+        for (const spa of spas) {
+          const deviceConfig = this.deviceConfigFor(spa)
+          if (deviceConfig.hide_device || deviceConfig.hideEnergy) {
+            continue
+          }
+          const handler = new SpaEnergyAccessory(
+            this,
+            matter,
+            spa,
+            this.spaDisplayName(spa, deviceConfig),
+            watts,
+            store,
+            maxGapFor(this.refreshRate),
+          )
+          wanted.add(handler.uuid)
+          this.energyHandlers.set(spa._id, handler)
+          void handler.register()
+        }
+      }
+    }
+
+    // A cached energy outlet that is no longer wanted - reporting turned off, or
+    // its spa hidden or gone from the account
+    if (matter) {
+      for (const cached of [...this.matterAccessories]) {
+        if (wanted.has(cached.UUID)) {
+          continue
+        }
+        try {
+          await matter.unregisterPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [cached])
+          this.matterAccessories.splice(this.matterAccessories.indexOf(cached), 1)
+          await this.warnLog(`Removing energy accessory from cache: ${cached.displayName}`)
+        } catch (e: any) {
+          await this.debugErrorLog(`Failed to remove energy accessory ${cached.displayName}: ${e?.message ?? e}`)
+        }
+      }
+    }
+  }
+
+  /**
    * Unregister cached accessories for spas that no longer exist on the account
    */
   private removeStaleAccessories(configuredUUIDs: string[]) {
@@ -249,6 +387,14 @@ export class ControlMySpaPlatform implements DynamicPlatformPlugin {
         try {
           const dashboard = await this.client.getDashboard(handler.spaId)
           handler.updateFromDashboard(dashboard)
+          this.energyHandlers.get(handler.spaId)?.update(dashboard)
+          // The same estimate as the energy outlet, whether or not that is turned on
+          this.historyRecorders.get(handler.spaId)?.record(
+            dashboard,
+            dashboard.isOnline === false
+              ? undefined
+              : estimatePower(dashboard.components, resolveWatts(this.config.options?.energy)).watts,
+          )
           await this.noteCloudReachable()
         } catch (e: any) {
           await this.reportCloudFailure(`Failed to refresh state for ${handler.displayName}`, e)

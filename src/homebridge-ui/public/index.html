@@ -28,6 +28,7 @@
 </div>
 <div id="menuWrapper" class="btn-group w-100 mb-0" role="group" aria-label="UI Menu" style="display: none">
   <button type="button" class="btn btn-primary" id="menuSettings">Settings</button>
+  <button type="button" class="btn btn-primary" id="menuDashboard">Dashboard</button>
   <button type="button" class="btn btn-primary" id="menuDevices">My Devices</button>
   <button type="button" class="btn btn-primary mr-0" id="menuHome">Support</button>
 </div>
@@ -108,6 +109,523 @@
     </table>
   </div>
 </div>
+<style>
+  /* ===== Dashboard ===== */
+  .viz-root {
+    position: relative;
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-1-soft: #86b6ef;
+    --tip-bg: #ffffff;
+    --tip-border: rgba(0, 0, 0, 0.15);
+    --card-border: rgba(0, 0, 0, 0.12);
+  }
+  .dark-mode .viz-root {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-1-soft: #184f95;
+    --tip-bg: #2b2b2a;
+    --tip-border: rgba(255, 255, 255, 0.18);
+    --card-border: rgba(255, 255, 255, 0.14);
+  }
+  .viz-root .viz-muted { opacity: 0.7; }
+  .viz-root .viz-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .viz-root .viz-filters select { width: auto; min-width: 160px; }
+  .viz-root .viz-filters .btn { margin: 0; padding: 4px 12px; text-transform: none; }
+  .viz-root .viz-updated { font-size: 0.8rem; margin-left: auto; }
+  .viz-root .viz-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .viz-root .viz-stat { border: 1px solid var(--card-border); border-radius: 6px; padding: 10px 12px; }
+  .viz-root .viz-stat-value { font-size: 1.5rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .viz-root .viz-stat-label { font-size: 0.8rem; }
+  .viz-root .viz-card { border: 1px solid var(--card-border); border-radius: 6px; padding: 10px 12px 6px; margin-bottom: 12px; }
+  .viz-root .viz-card h6 { margin: 0 0 2px; font-weight: 600; }
+  .viz-root .viz-card .viz-sub { font-size: 0.8rem; margin-bottom: 6px; }
+  .viz-root .viz-legend { display: flex; gap: 14px; font-size: 0.8rem; margin-bottom: 4px; flex-wrap: wrap; }
+  .viz-root .viz-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .viz-root .viz-key-line { width: 16px; height: 0; border-top: 2px solid; display: inline-block; }
+  .viz-root .viz-key-line.dashed { border-top-style: dashed; }
+  .viz-root .viz-key-rect { width: 12px; height: 10px; border-radius: 2px; display: inline-block; }
+  .viz-root svg { display: block; width: 100%; overflow: visible; }
+  .viz-root svg text { fill: currentColor; font-size: 11px; }
+  .viz-root .viz-axis text { opacity: 0.7; }
+  .viz-root .viz-grid line { stroke: currentColor; stroke-opacity: 0.12; }
+  .viz-root .viz-hit { fill: transparent; cursor: crosshair; }
+  .viz-root .viz-mark:hover, .viz-root .viz-mark:focus { opacity: 0.8; outline: none; }
+  .viz-root .viz-tip {
+    position: absolute; pointer-events: none; z-index: 10; display: none;
+    background: var(--tip-bg); border: 1px solid var(--tip-border); border-radius: 6px;
+    padding: 6px 9px; font-size: 0.8rem; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); white-space: nowrap;
+  }
+  .viz-root .viz-tip strong { font-variant-numeric: tabular-nums; }
+  .viz-root .viz-tip .viz-tip-row { display: flex; align-items: center; gap: 6px; }
+  .viz-root .viz-table { width: 100%; font-size: 0.85rem; margin: 0; }
+  .viz-root .viz-table td, .viz-root .viz-table th { padding: 4px 6px; border-top: 1px solid var(--card-border); text-align: left; }
+  .viz-root .viz-table td:first-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .viz-root .viz-loading { opacity: 0.5; transition: opacity 0.2s; }
+</style>
+<div id="pageDashboard" class="viz-root mt-4" style="display: none">
+  <div class="viz-filters" role="group" aria-label="Dashboard filters">
+    <select class="form-control" id="dashSpa" aria-label="Spa"></select>
+    <div class="btn-group" role="group" aria-label="Time range">
+      <button type="button" class="btn btn-primary" data-hours="24">24 hours</button>
+      <button type="button" class="btn btn-primary" data-hours="168">7 days</button>
+      <button type="button" class="btn btn-primary" data-hours="720">30 days</button>
+    </div>
+    <span class="viz-updated viz-muted" id="dashUpdated"></span>
+  </div>
+  <div id="dashEmpty" style="display: none">
+    <p class="viz-muted" id="dashEmptyText"></p>
+  </div>
+  <div id="dashBody">
+    <div class="viz-stats" id="dashStats"></div>
+    <div class="viz-card">
+      <h6>Water temperature</h6>
+      <div class="viz-legend">
+        <span><i class="viz-key-line" style="border-color: var(--series-1)"></i>Water</span>
+        <span><i class="viz-key-line dashed" style="border-color: var(--series-2)"></i>Set temperature</span>
+      </div>
+      <div id="chartTemp"></div>
+    </div>
+    <div class="viz-card">
+      <h6>Estimated power</h6>
+      <div class="viz-sub viz-muted">Watts, from which components were running and the wattages in Energy Estimate.</div>
+      <div id="chartPower"></div>
+    </div>
+    <div class="viz-card">
+      <h6 id="energyTitle">Estimated energy</h6>
+      <div class="viz-sub viz-muted" id="energySub"></div>
+      <div id="chartEnergy"></div>
+    </div>
+    <div class="viz-card">
+      <h6>Activity</h6>
+      <div class="viz-legend">
+        <span><i class="viz-key-rect" style="background: var(--series-1)"></i>On / high</span>
+        <span><i class="viz-key-rect" style="background: var(--series-1-soft)"></i>Low</span>
+      </div>
+      <div id="chartActivity"></div>
+    </div>
+    <div class="viz-card">
+      <h6>On / off changes</h6>
+      <div class="viz-sub viz-muted" id="changesSub"></div>
+      <table class="viz-table" id="dashChanges">
+        <thead><tr><th scope="col">Time</th><th scope="col">Component</th><th scope="col">Change</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="text-center mt-2 mb-1"><button type="button" class="btn btn-sm btn-primary" id="changesMore" style="display: none">Show all</button></div>
+    </div>
+  </div>
+  <div class="viz-tip" id="dashTip" role="tooltip"></div>
+</div>
+<script>
+  // ===== Dashboard: charts drawn as plain SVG, so nothing is fetched from the internet =====
+  window.ControlMySpaDashboard = (() => {
+    const SVG = 'http://www.w3.org/2000/svg';
+    const VALUE_NAMES = { OFF: 'Off', ON: 'On', HIGH: 'High', LOW: 'Low', MED: 'Medium', WAITING: 'Waiting', DISABLED: 'Disabled' };
+    const valueName = (v) => VALUE_NAMES[v] || (v.charAt(0) + v.slice(1).toLowerCase());
+    let state = { hours: 24, spaId: null, report: null, timer: null, showAllChanges: false, refreshRate: 60 };
+
+    const svgEl = (tag, attrs, parent) => {
+      const node = document.createElementNS(SVG, tag);
+      for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+      if (parent) parent.appendChild(node);
+      return node;
+    };
+    const fmtNumber = (n, digits = 0) => n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    const fmtClock = (t) => new Date(t).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const fmtDay = (t) => new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    const fmtAxisTime = (t, hours) => hours <= 24
+      ? fmtClock(t)
+      : new Date(t).toLocaleDateString(undefined, hours <= 168 ? { weekday: 'short' } : { day: 'numeric', month: 'short' });
+    const fmtWhen = (t) => fmtDay(t) + ', ' + fmtClock(t);
+    const fmtDuration = (ms) => {
+      const minutes = Math.round(ms / 60000);
+      if (minutes < 60) return minutes + ' min';
+      const h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      return h + ' h' + (m ? ' ' + m + ' min' : '');
+    };
+
+    // Rounded tick values covering [min, max]
+    const niceTicks = (min, max, count = 4) => {
+      if (min === max) { min -= 1; max += 1; }
+      const raw = (max - min) / count;
+      const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+      const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+      const ticks = [];
+      for (let v = Math.floor(min / step) * step; v <= max + step * 0.001; v += step) ticks.push(Math.round(v * 1000) / 1000);
+      if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+      return ticks;
+    };
+
+    // Evenly spaced time ticks, on whole hours or midnights
+    const timeTicks = (from, to, hours) => {
+      const step = hours <= 24 ? 4 * 3600e3 : hours <= 168 ? 24 * 3600e3 : 5 * 24 * 3600e3;
+      const ticks = [];
+      const start = new Date(from);
+      if (hours <= 24) { start.setMinutes(0, 0, 0); start.setHours(Math.ceil(start.getHours() / 4) * 4); }
+      else { start.setHours(24, 0, 0, 0); }
+      for (let t = start.getTime(); t <= to; t += step) ticks.push(t);
+      return ticks;
+    };
+
+    const tip = () => document.getElementById('dashTip');
+    const showTip = (rows, title, clientX, clientY) => {
+      const el = tip();
+      el.textContent = '';
+      if (title) { const head = document.createElement('div'); head.className = 'viz-muted'; head.textContent = title; el.appendChild(head); }
+      for (const row of rows) {
+        const line = document.createElement('div');
+        line.className = 'viz-tip-row';
+        if (row.color) { const key = document.createElement('i'); key.className = 'viz-key-line' + (row.dashed ? ' dashed' : ''); key.style.borderColor = row.color; line.appendChild(key); }
+        const value = document.createElement('strong'); value.textContent = row.value; line.appendChild(value);
+        if (row.label) { const label = document.createElement('span'); label.className = 'viz-muted'; label.textContent = row.label; line.appendChild(label); }
+        el.appendChild(line);
+      }
+      el.style.display = 'block';
+      const root = document.getElementById('pageDashboard').getBoundingClientRect();
+      let x = clientX - root.left + 12;
+      const width = el.offsetWidth;
+      if (x + width > root.width) x = clientX - root.left - width - 12;
+      el.style.left = Math.max(0, x) + 'px';
+      el.style.top = (clientY - root.top + 12) + 'px';
+    };
+    const hideTip = () => { tip().style.display = 'none'; };
+
+    const frame = (container, height) => {
+      container.textContent = '';
+      const width = Math.max(280, container.clientWidth || 600);
+      const m = { top: 8, right: 12, bottom: 22, left: 46 };
+      const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, height, role: 'img' }, container);
+      return { svg, width, height, m, iw: width - m.left - m.right, ih: height - m.top - m.bottom };
+    };
+
+    const drawAxes = (f, yTicks, yScale, yFmt, xTicks, xScale, xFmt) => {
+      const grid = svgEl('g', { class: 'viz-grid' }, f.svg);
+      const axis = svgEl('g', { class: 'viz-axis' }, f.svg);
+      for (const v of yTicks) {
+        const y = yScale(v);
+        svgEl('line', { x1: f.m.left, x2: f.width - f.m.right, y1: y, y2: y }, grid);
+        svgEl('text', { x: f.m.left - 6, y: y + 4, 'text-anchor': 'end' }, axis).textContent = yFmt(v);
+      }
+      for (const t of xTicks) {
+        const x = xScale(t);
+        if (x < f.m.left || x > f.width - f.m.right) continue;
+        svgEl('text', { x, y: f.height - 6, 'text-anchor': 'middle' }, axis).textContent = xFmt(t);
+      }
+    };
+
+    // A line chart with a crosshair that lists every series at the nearest point
+    const lineChart = (container, opts) => {
+      const { points, series, from, to, hours, yFmt, valueFmt, area, minSpan } = opts;
+      const f = frame(container, 190);
+      const values = points.flatMap((p) => series.map((s) => p[s.key])).filter((v) => v !== null && v !== undefined);
+      if (!values.length) { svgEl('text', { x: f.width / 2, y: f.height / 2, 'text-anchor': 'middle', class: 'viz-muted' }, f.svg).textContent = 'No readings in this period'; return; }
+      let lo = Math.min(...values); let hi = Math.max(...values);
+      if (area) lo = 0;
+      if (hi - lo < (minSpan || 0)) { const mid = (hi + lo) / 2; lo = area ? 0 : mid - minSpan / 2; hi = area ? minSpan : mid + minSpan / 2; }
+      const yTicks = niceTicks(lo, hi);
+      const y0 = yTicks[0]; const y1 = yTicks[yTicks.length - 1];
+      const xScale = (t) => f.m.left + ((t - from) / (to - from)) * f.iw;
+      const yScale = (v) => f.m.top + f.ih - ((v - y0) / (y1 - y0)) * f.ih;
+      drawAxes(f, yTicks, yScale, yFmt, timeTicks(from, to, hours), xScale, (t) => fmtAxisTime(t, hours));
+
+      for (const s of series) {
+        // break the line where there is no reading
+        let d = ''; let areaD = ''; let run = [];
+        const flush = () => {
+          if (run.length) {
+            d += run.map((p, i) => (i ? 'L' : 'M') + xScale(p.t).toFixed(1) + ',' + yScale(p[s.key]).toFixed(1)).join('');
+            if (area && run.length) {
+              areaD += 'M' + xScale(run[0].t).toFixed(1) + ',' + yScale(y0).toFixed(1)
+                + run.map((p) => 'L' + xScale(p.t).toFixed(1) + ',' + yScale(p[s.key]).toFixed(1)).join('')
+                + 'L' + xScale(run[run.length - 1].t).toFixed(1) + ',' + yScale(y0).toFixed(1) + 'Z';
+            }
+          }
+          run = [];
+        };
+        for (const p of points) { if (p[s.key] === null || p[s.key] === undefined) flush(); else run.push(p); }
+        flush();
+        if (areaD) svgEl('path', { d: areaD, fill: s.color, 'fill-opacity': 0.15, stroke: 'none' }, f.svg);
+        svgEl('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-dasharray': s.dashed ? '5 4' : 'none' }, f.svg);
+      }
+
+      // crosshair + tooltip
+      const hair = svgEl('line', { y1: f.m.top, y2: f.m.top + f.ih, stroke: 'currentColor', 'stroke-opacity': 0.35, visibility: 'hidden' }, f.svg);
+      const dots = series.map((s) => svgEl('circle', { r: 4, fill: s.color, stroke: 'var(--tip-bg)', 'stroke-width': 2, visibility: 'hidden' }, f.svg));
+      const hit = svgEl('rect', { x: f.m.left, y: f.m.top, width: f.iw, height: f.ih, class: 'viz-hit', tabindex: 0, 'aria-label': opts.label }, f.svg);
+      const move = (clientX, clientY) => {
+        const box = f.svg.getBoundingClientRect();
+        const t = from + ((clientX - box.left) * (f.width / box.width) - f.m.left) / f.iw * (to - from);
+        let best = null;
+        for (const p of points) if (series.some((s) => p[s.key] !== null) && (!best || Math.abs(p.t - t) < Math.abs(best.t - t))) best = p;
+        if (!best) return;
+        const x = xScale(best.t);
+        hair.setAttribute('x1', x); hair.setAttribute('x2', x); hair.setAttribute('visibility', 'visible');
+        series.forEach((s, i) => {
+          const v = best[s.key];
+          if (v === null) { dots[i].setAttribute('visibility', 'hidden'); return; }
+          dots[i].setAttribute('cx', x); dots[i].setAttribute('cy', yScale(v)); dots[i].setAttribute('visibility', 'visible');
+        });
+        showTip(series.filter((s) => best[s.key] !== null).map((s) => ({ value: valueFmt(best[s.key]), label: s.label, color: s.color, dashed: s.dashed })),
+          hours <= 24 ? fmtClock(best.t) : fmtWhen(best.t), clientX, clientY);
+      };
+      const leave = () => { hair.setAttribute('visibility', 'hidden'); dots.forEach((d) => d.setAttribute('visibility', 'hidden')); hideTip(); };
+      hit.addEventListener('pointermove', (e) => move(e.clientX, e.clientY));
+      hit.addEventListener('pointerleave', leave);
+      hit.addEventListener('blur', leave);
+    };
+
+    // Bars for energy per hour or per day, each its own hover target
+    const barChart = (container, buckets, bucket, hours) => {
+      const f = frame(container, 170);
+      if (!buckets.length) return;
+      const hi = Math.max(0.1, ...buckets.map((b) => b.kWh));
+      const yTicks = niceTicks(0, hi);
+      const y1 = yTicks[yTicks.length - 1];
+      const yScale = (v) => f.m.top + f.ih - (v / y1) * f.ih;
+      const slot = f.iw / buckets.length;
+      const barW = Math.max(1, slot - 2);
+      const labelEvery = Math.max(1, Math.ceil(buckets.length / 8));
+      const grid = svgEl('g', { class: 'viz-grid' }, f.svg);
+      const axis = svgEl('g', { class: 'viz-axis' }, f.svg);
+      for (const v of yTicks) {
+        const y = yScale(v);
+        svgEl('line', { x1: f.m.left, x2: f.width - f.m.right, y1: y, y2: y }, grid);
+        svgEl('text', { x: f.m.left - 6, y: y + 4, 'text-anchor': 'end' }, axis).textContent = fmtNumber(v, v < 10 && v % 1 ? 1 : 0);
+      }
+      buckets.forEach((b, i) => {
+        const x = f.m.left + i * slot + 1;
+        const y = yScale(b.kWh);
+        const h = Math.max(0, f.m.top + f.ih - y);
+        const r = Math.min(4, barW / 2, h);
+        // rounded at the data end only, square on the baseline
+        const base = f.m.top + f.ih;
+        const d = h > 0
+          ? `M${x},${base}V${y + r}Q${x},${y} ${x + r},${y}H${x + barW - r}Q${x + barW},${y} ${x + barW},${y + r}V${base}Z`
+          : '';
+        if (d) svgEl('path', { d, fill: 'var(--series-1)', class: 'viz-mark' }, f.svg);
+        const hit = svgEl('rect', { x: x - 1, y: f.m.top, width: slot, height: f.ih, class: 'viz-hit', tabindex: 0 }, f.svg);
+        const when = bucket === 'hour'
+          ? fmtClock(b.t) + '–' + fmtClock(b.t + 3600e3)
+          : fmtDay(b.t);
+        hit.setAttribute('aria-label', when + ': ' + fmtNumber(b.kWh, 2) + ' kWh');
+        const show = (e) => {
+          const box = e.target.getBoundingClientRect ? e.target.getBoundingClientRect() : f.svg.getBoundingClientRect();
+          showTip([{ value: fmtNumber(b.kWh, 2) + ' kWh' }], when, e.clientX ?? box.left + box.width / 2, e.clientY ?? box.top);
+        };
+        hit.addEventListener('pointermove', show);
+        hit.addEventListener('focus', show);
+        hit.addEventListener('pointerleave', hideTip);
+        hit.addEventListener('blur', hideTip);
+        if (i % labelEvery === 0) {
+          svgEl('text', { x: x + barW / 2, y: f.height - 6, 'text-anchor': 'middle' }, axis).textContent = bucket === 'hour'
+            ? new Date(b.t).toLocaleTimeString(undefined, { hour: 'numeric' })
+            : new Date(b.t).toLocaleDateString(undefined, hours <= 168 ? { weekday: 'short' } : { day: 'numeric', month: 'short' });
+        }
+      });
+    };
+
+    // One lane per component, a bar for each time it ran
+    const timeline = (container, lanes, from, to, hours) => {
+      container.textContent = '';
+      if (!lanes.length) { const p = document.createElement('p'); p.className = 'viz-muted'; p.textContent = 'No components recorded yet.'; container.appendChild(p); return; }
+      const laneH = 22;
+      const width = Math.max(280, container.clientWidth || 600);
+      const m = { top: 4, right: 12, bottom: 22, left: 118 };
+      const height = m.top + lanes.length * laneH + m.bottom;
+      const iw = width - m.left - m.right;
+      const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, height }, container);
+      const xScale = (t) => m.left + ((t - from) / (to - from)) * iw;
+      const grid = svgEl('g', { class: 'viz-grid' }, svg);
+      const axis = svgEl('g', { class: 'viz-axis' }, svg);
+      for (const t of timeTicks(from, to, hours)) {
+        const x = xScale(t);
+        svgEl('line', { x1: x, x2: x, y1: m.top, y2: height - m.bottom }, grid);
+        svgEl('text', { x, y: height - 6, 'text-anchor': 'middle' }, axis).textContent = fmtAxisTime(t, hours);
+      }
+      lanes.forEach((lane, i) => {
+        const y = m.top + i * laneH;
+        const name = svgEl('text', { x: 0, y: y + laneH / 2 + 4 }, svg);
+        name.textContent = lane.label;
+        const total = svgEl('title', {}, name);
+        total.textContent = lane.label + ': ran ' + fmtDuration(lane.onMs) + ' in this period';
+        svgEl('line', { x1: m.left, x2: width - m.right, y1: y + laneH - 1, y2: y + laneH - 1 }, grid);
+        for (const seg of lane.segments) {
+          const x1 = xScale(seg.from);
+          const w = Math.max(2, xScale(seg.to) - x1);
+          const bar = svgEl('rect', {
+            x: x1, y: y + 5, width: w, height: laneH - 10, rx: Math.min(3, w / 2),
+            fill: seg.v === 'LOW' ? 'var(--series-1-soft)' : 'var(--series-1)', class: 'viz-mark', tabindex: 0,
+          }, svg);
+          const text = lane.label + ' ' + valueName(seg.v).toLowerCase();
+          const when = (hours <= 24 ? fmtClock(seg.from) : fmtWhen(seg.from)) + ' – ' + fmtClock(seg.to);
+          bar.setAttribute('aria-label', text + ', ' + when + ', ' + fmtDuration(seg.to - seg.from));
+          const show = (e) => {
+            const box = bar.getBoundingClientRect();
+            showTip([{ value: fmtDuration(seg.to - seg.from), label: text }], when, e.clientX ?? box.left, e.clientY ?? box.top);
+          };
+          bar.addEventListener('pointermove', show);
+          bar.addEventListener('focus', show);
+          bar.addEventListener('pointerleave', hideTip);
+          bar.addEventListener('blur', hideTip);
+        }
+      });
+    };
+
+    const renderStats = (report) => {
+      const box = document.getElementById('dashStats');
+      box.textContent = '';
+      const unit = '°' + report.unit;
+      const latest = report.latest || {};
+      const stale = latest.t && Date.now() - latest.t > 15 * 60e3;
+      const tiles = [
+        { value: latest.temp !== null && latest.temp !== undefined ? fmtNumber(latest.temp, report.unit === 'C' ? 1 : 0) + unit : '–', label: latest.offline ? 'Water (spa offline)' : 'Water now' },
+        { value: latest.set !== null && latest.set !== undefined ? fmtNumber(latest.set, report.unit === 'C' ? 1 : 0) + unit : '–', label: 'Set temperature' },
+        { value: latest.w !== null && latest.w !== undefined ? fmtNumber(latest.w) + ' W' : '–', label: 'Drawing now (estimate)' },
+        { value: fmtNumber(report.totalKWh, report.totalKWh < 100 ? 1 : 0) + ' kWh', label: 'Energy, ' + rangeName(state.hours) + ' (estimate)' },
+      ];
+      for (const t of tiles) {
+        const tile = document.createElement('div'); tile.className = 'viz-stat';
+        const v = document.createElement('div'); v.className = 'viz-stat-value'; v.textContent = t.value;
+        const l = document.createElement('div'); l.className = 'viz-stat-label viz-muted'; l.textContent = t.label;
+        tile.append(v, l); box.appendChild(tile);
+      }
+      document.getElementById('dashUpdated').textContent = latest.t
+        ? (stale ? 'Last reading ' : 'Updated ') + fmtWhen(latest.t)
+        : '';
+    };
+
+    const rangeName = (hours) => (hours === 24 ? 'last 24 hours' : hours === 168 ? 'last 7 days' : 'last 30 days');
+
+    const renderChanges = (report) => {
+      const body = document.querySelector('#dashChanges tbody');
+      body.textContent = '';
+      const limit = state.showAllChanges ? report.changes.length : 25;
+      for (const c of report.changes.slice(0, limit)) {
+        const tr = document.createElement('tr');
+        const cells = [fmtWhen(c.t), c.label, valueName(c.from) + ' → ' + valueName(c.to)];
+        for (const text of cells) { const td = document.createElement('td'); td.textContent = text; tr.appendChild(td); }
+        body.appendChild(tr);
+      }
+      document.getElementById('changesSub').textContent = report.changes.length
+        ? report.changes.length + ' change' + (report.changes.length === 1 ? '' : 's') + ' in the ' + rangeName(state.hours) + ', newest first.'
+        : 'No changes in the ' + rangeName(state.hours) + '.';
+      const more = document.getElementById('changesMore');
+      more.style.display = report.changes.length > limit ? 'inline-block' : 'none';
+      more.textContent = 'Show all ' + report.changes.length;
+    };
+
+    const render = () => {
+      const report = state.report;
+      if (!report) return;
+      const empty = document.getElementById('dashEmpty');
+      const body = document.getElementById('dashBody');
+      if (report.empty) {
+        empty.style.display = 'block';
+        body.style.display = 'none';
+        document.getElementById('dashEmptyText').textContent = 'No history recorded for this spa yet. The plugin saves a reading at every refresh, so check back in a few minutes. If nothing appears, make sure Record History is on under Advanced Settings, and restart Homebridge after installing this version.';
+        return;
+      }
+      empty.style.display = 'none';
+      body.style.display = 'block';
+      renderStats(report);
+      const tempUnit = '°' + report.unit;
+      lineChart(document.getElementById('chartTemp'), {
+        points: report.points, from: report.from, to: report.to, hours: state.hours, label: 'Water temperature chart',
+        series: [
+          { key: 'temp', label: 'Water', color: 'var(--series-1)' },
+          { key: 'set', label: 'Set temperature', color: 'var(--series-2)', dashed: true },
+        ],
+        yFmt: (v) => fmtNumber(v, 0) + '°',
+        valueFmt: (v) => fmtNumber(v, 1) + tempUnit,
+        minSpan: report.unit === 'C' ? 4 : 8,
+      });
+      lineChart(document.getElementById('chartPower'), {
+        points: report.points, from: report.from, to: report.to, hours: state.hours, area: true, label: 'Estimated power chart',
+        series: [{ key: 'w', label: state.hours <= 24 ? 'estimated' : 'average, estimated', color: 'var(--series-1)' }],
+        yFmt: (v) => (v >= 1000 ? fmtNumber(v / 1000, v % 1000 ? 1 : 0) + ' kW' : fmtNumber(v) + ' W'),
+        valueFmt: (v) => fmtNumber(v) + ' W',
+        minSpan: 1000,
+      });
+      document.getElementById('energyTitle').textContent = 'Estimated energy per ' + report.bucket;
+      document.getElementById('energySub').textContent = 'kWh. ' + fmtNumber(report.totalKWh, 1) + ' kWh in the ' + rangeName(state.hours) + '.';
+      barChart(document.getElementById('chartEnergy'), report.energy, report.bucket, state.hours);
+      timeline(document.getElementById('chartActivity'), report.lanes, report.from, report.to, state.hours);
+      renderChanges(report);
+    };
+
+    const load = async (quiet) => {
+      if (!state.spaId) return;
+      const page = document.getElementById('dashBody');
+      page.classList.add('viz-loading');
+      try {
+        state.report = await homebridge.request('getHistory', {
+          spaId: state.spaId, hours: state.hours, refreshRate: state.refreshRate,
+          tzOffsetMinutes: -new Date().getTimezoneOffset(),
+        });
+        render();
+      } catch (err) {
+        if (!quiet) homebridge.toast.error(err.message, 'Could not load the history');
+      } finally {
+        page.classList.remove('viz-loading');
+      }
+    };
+
+    const setRangeButtons = () => {
+      document.querySelectorAll('#pageDashboard [data-hours]').forEach((btn) => {
+        const active = Number(btn.dataset.hours) === state.hours;
+        btn.classList.toggle('btn-elegant', active);
+        btn.classList.toggle('btn-primary', !active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+    };
+
+    let wired = false;
+    const wire = () => {
+      if (wired) return;
+      wired = true;
+      document.querySelectorAll('#pageDashboard [data-hours]').forEach((btn) => btn.addEventListener('click', () => {
+        state.hours = Number(btn.dataset.hours); state.showAllChanges = false; setRangeButtons(); load();
+      }));
+      document.getElementById('dashSpa').addEventListener('change', (e) => { state.spaId = e.target.value; load(); });
+      document.getElementById('changesMore').addEventListener('click', () => { state.showAllChanges = true; renderChanges(state.report); });
+      let resizeTimer;
+      window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+    };
+
+    return {
+      async show(refreshRate) {
+        wire();
+        state.refreshRate = refreshRate || 60;
+        document.getElementById('pageDashboard').style.display = 'block';
+        setRangeButtons();
+        const spas = await homebridge.request('getHistorySpas');
+        const select = document.getElementById('dashSpa');
+        select.textContent = '';
+        for (const spa of spas) { const o = document.createElement('option'); o.value = spa.id; o.textContent = spa.name; select.appendChild(o); }
+        select.style.display = spas.length > 1 ? '' : 'none';
+        if (!spas.length) {
+          document.getElementById('dashBody').style.display = 'none';
+          document.getElementById('dashEmpty').style.display = 'block';
+          document.getElementById('dashEmptyText').textContent = 'No history recorded yet. After installing this version, restart Homebridge - the plugin then saves a reading at every refresh. Make sure Record History is on under Advanced Settings.';
+          return;
+        }
+        if (!spas.some((s) => s.id === state.spaId)) state.spaId = spas[0].id;
+        select.value = state.spaId;
+        await load();
+        clearInterval(state.timer);
+        // keep it current while it is open
+        state.timer = setInterval(() => load(true), Math.max(30, state.refreshRate) * 1000);
+      },
+      hide() {
+        clearInterval(state.timer);
+        state.timer = null;
+        hideTip();
+        document.getElementById('pageDashboard').style.display = 'none';
+      },
+    };
+  })();
+</script>
 <div id="pageSupport" class="mt-4" style="display: none">
   <p class="text-center lead">Thank you for using <strong>homebridge-controlmyspa</strong></p>
   <h5>Plugin Information</h5>
@@ -444,6 +962,7 @@
       };
       showDevices = async () => {
         homebridge.showSpinner();
+        leaveDashboard();
         // The save button stays enabled here so entries staged by the picker
         // buttons can be saved without switching back to the Settings tab
         homebridge.enableSaveButton?.();
@@ -504,6 +1023,7 @@
       };
       showSupport = () => {
         homebridge.showSpinner();
+        leaveDashboard();
         homebridge.hideSchemaForm();
         document.getElementById('menuHome').classList.add('btn-elegant');
         document.getElementById('menuHome').classList.remove('btn-primary');
@@ -517,6 +1037,7 @@
       };
       showSettings = () => {
         homebridge.showSpinner();
+        leaveDashboard();
         homebridge.enableSaveButton?.();
         document.getElementById('menuHome').classList.remove('btn-elegant');
         document.getElementById('menuHome').classList.add('btn-primary');
@@ -529,6 +1050,32 @@
         homebridge.showSchemaForm();
         homebridge.hideSpinner();
       };
+      const leaveDashboard = () => {
+        window.ControlMySpaDashboard.hide();
+        document.getElementById('menuDashboard').classList.remove('btn-elegant');
+        document.getElementById('menuDashboard').classList.add('btn-primary');
+      };
+      showDashboard = async () => {
+        homebridge.showSpinner();
+        try {
+          homebridge.hideSchemaForm();
+          for (const id of ['menuHome', 'menuDevices', 'menuSettings']) {
+            document.getElementById(id).classList.remove('btn-elegant');
+            document.getElementById(id).classList.add('btn-primary');
+          }
+          document.getElementById('menuDashboard').classList.add('btn-elegant');
+          document.getElementById('menuDashboard').classList.remove('btn-primary');
+          document.getElementById('pageSupport').style.display = 'none';
+          document.getElementById('pageDevices').style.display = 'none';
+          const config = (await homebridge.getPluginConfig())[0] || {};
+          await window.ControlMySpaDashboard.show(config.options?.refreshRate);
+        } catch (err) {
+          homebridge.toast.error(err.message, 'Error');
+        } finally {
+          homebridge.hideSpinner();
+        }
+      };
+      menuDashboard.addEventListener('click', () => showDashboard());
       menuHome.addEventListener('click', () => showSupport());
       menuDevices.addEventListener('click', () => showDevices());
       menuSettings.addEventListener('click', () => showSettings());

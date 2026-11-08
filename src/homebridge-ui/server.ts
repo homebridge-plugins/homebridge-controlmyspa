@@ -6,6 +6,12 @@ import fs from 'node:fs'
 
 import { HomebridgePluginUiServer } from '@homebridge/plugin-ui-utils'
 
+import { maxGapFor } from '../energy.js'
+import { buildReport, historyFile, historyIndexFile, readHistory } from '../history.js'
+
+// The windows the dashboard offers, in hours - anything else is refused
+const ALLOWED_HOURS = [24, 24 * 7, 24 * 30]
+
 class PluginUiServer extends HomebridgePluginUiServer {
   constructor() {
     super()
@@ -41,6 +47,51 @@ class PluginUiServer extends HomebridgePluginUiServer {
         return []
       }
     })
+
+    /*
+      The spas the plugin has recorded history for, for the dashboard's picker
+    */
+    this.onRequest('getHistorySpas', () => {
+      try {
+        const path = historyIndexFile(this.homebridgeStoragePath!)
+        if (!fs.existsSync(path)) {
+          return []
+        }
+        const index = JSON.parse(fs.readFileSync(path, 'utf8'))
+        return Object.entries(index?.spas ?? {}).map(([id, value]: [string, any]) => ({
+          id,
+          name: String(value?.name ?? id),
+        }))
+      } catch {
+        return []
+      }
+    })
+
+    /*
+      One spa's history over a window, already reduced to what the dashboard draws
+    */
+    this.onRequest('getHistory', (payload: any) => {
+      const spaId = String(payload?.spaId ?? '')
+      const hours = ALLOWED_HOURS.includes(Number(payload?.hours))
+        ? Number(payload.hours)
+        : 24
+      const refreshRate = Number(payload?.refreshRate) > 0
+        ? Number(payload.refreshRate)
+        : 60
+      const tzOffsetMinutes = Number.isFinite(Number(payload?.tzOffsetMinutes))
+        ? Number(payload.tzOffsetMinutes)
+        : 0
+      const entries = spaId
+        ? readHistory(historyFile(this.homebridgeStoragePath!, spaId))
+        : []
+      return buildReport(entries, {
+        hours,
+        tzOffsetMinutes,
+        maxGapMs: maxGapFor(refreshRate),
+        points: 300,
+      })
+    })
+
     this.ready()
   }
 }

@@ -34,7 +34,10 @@
             "description": "The password for your ControlMySpa account."
           }
         },
-        "required": ["email", "password"]
+        "required": [
+          "email",
+          "password"
+        ]
       },
       "options": {
         "type": "object",
@@ -66,6 +69,14 @@
                     "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId);"
                   }
                 },
+                "hideEnergy": {
+                  "title": "Hide Energy",
+                  "type": "boolean",
+                  "description": "If enabled, this spa gets no energy accessory when energy reporting is on.",
+                  "condition": {
+                    "functionBody": "return (model.options && model.options.devices && model.options.devices[arrayIndices].spaId && !model.options.devices[arrayIndices].hide_device && model.options.energy && model.options.energy.enabled);"
+                  }
+                },
                 "showPanelLock": {
                   "title": "Show Panel Lock",
                   "type": "boolean",
@@ -94,6 +105,12 @@
             "placeholder": 60,
             "description": "How often, in seconds, the plugin fetches the latest spa state from the ControlMySpa cloud. Default is 60, minimum is 30."
           },
+          "recordHistory": {
+            "title": "Record History",
+            "type": "boolean",
+            "default": true,
+            "description": "Keep 30 days of water temperature, estimated energy, and when the jets, blower, heater and filter cycles ran, for the Dashboard tab on this page. Turn off to stop recording; the history already kept stays until it ages out."
+          },
           "logging": {
             "title": "Plugin Logging Level",
             "description": "None turns off all messages from this plugin. Standard shows normal activity, warnings and errors. Debug adds detailed messages, and is what to use when reporting a problem. Default behaves the same as Standard, and also shows debug messages when Homebridge's own debug mode is on.",
@@ -106,23 +123,122 @@
               },
               {
                 "title": "None",
-                "enum": ["none"]
+                "enum": [
+                  "none"
+                ]
               },
               {
                 "title": "Standard",
-                "enum": ["standard"]
+                "enum": [
+                  "standard"
+                ]
               },
               {
                 "title": "Debug",
-                "enum": ["debug"]
+                "enum": [
+                  "debug"
+                ]
               }
             ]
+          },
+          "energy": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "title": "Estimate Energy Use (Matter)",
+                "type": "boolean",
+                "default": false,
+                "description": "Publish each spa's estimated power and energy as a Matter outlet, shown in Apple Home's Energy view (iOS/tvOS 27+). Needs Homebridge 2.3+ with Matter enabled on this plugin's bridge. These are estimates from which components are running, not meter readings."
+              },
+              "heaterWatts": {
+                "title": "Heater (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 2800,
+                "description": "Power drawn while the heater is heating. Default 2800 W - check your spa's manual or heater label.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "pumpWatts": {
+                "title": "Jet Pump, High (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 2200,
+                "description": "Power drawn by each jet pump on high (or single-speed). Default 2200 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "pumpLowWatts": {
+                "title": "Jet Pump, Low (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 500,
+                "description": "Power drawn by each two-speed jet pump on low. Default 500 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "blowerWatts": {
+                "title": "Blower (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 900,
+                "description": "Power drawn by each air blower. Default 900 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "circulationPumpWatts": {
+                "title": "Circulation Pump (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 400,
+                "description": "Power drawn by the circulation pump. Default 400 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "lightWatts": {
+                "title": "Light (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 10,
+                "description": "Power drawn by each spa light. Default 10 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              },
+              "standbyWatts": {
+                "title": "Standby (W)",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 15000,
+                "placeholder": 0,
+                "description": "Power always drawn by the controller and electronics, even with everything off. Default 0 W.",
+                "condition": {
+                  "functionBody": "return (model.options && model.options.energy && model.options.energy.enabled);"
+                }
+              }
+            }
           }
         },
-        "required": ["logging"]
+        "required": [
+          "logging"
+        ]
       }
     },
-    "required": ["name", "credentials"]
+    "required": [
+      "name",
+      "credentials"
+    ]
   },
   "layout": [
     {
@@ -150,10 +266,28 @@
             "options.devices[].spaId",
             "options.devices[].configDeviceName",
             "options.devices[].hide_device",
+            "options.devices[].hideEnergy",
             "options.devices[].showPanelLock",
             "options.devices[].firmware"
           ]
         }
+      ]
+    },
+    {
+      "type": "fieldset",
+      "title": "Energy Estimate",
+      "expandable": true,
+      "expanded": false,
+      "description": "Estimated power and energy for Apple Home's Energy view, published over Matter.",
+      "items": [
+        "options.energy.enabled",
+        "options.energy.heaterWatts",
+        "options.energy.pumpWatts",
+        "options.energy.pumpLowWatts",
+        "options.energy.blowerWatts",
+        "options.energy.circulationPumpWatts",
+        "options.energy.lightWatts",
+        "options.energy.standbyWatts"
       ]
     },
     {
@@ -163,6 +297,7 @@
       "expanded": false,
       "items": [
         "options.refreshRate",
+        "options.recordHistory",
         "options.logging"
       ]
     }

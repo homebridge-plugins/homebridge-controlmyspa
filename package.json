@@ -34,10 +34,12 @@
   "keywords": [
     "homebridge-plugin",
     "supports-hap",
+    "supports-matter",
     "controlmyspa",
     "balboa",
     "spa",
-    "hot tub"
+    "hot tub",
+    "energy"
   ],
   "main": "dist/index.js",
   "engines": {

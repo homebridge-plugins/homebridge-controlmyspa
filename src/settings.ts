@@ -43,12 +43,30 @@ export interface options {
   devices?: devicesConfig[]
   refreshRate?: number
   logging?: string
+  energy?: energyConfig
+  recordHistory?: boolean
+}
+
+/**
+ * Estimated energy reporting over Matter (Homebridge 2.3+, Apple Home 27+).
+ * Every wattage is optional and falls back to the defaults in energy.ts.
+ */
+export interface energyConfig {
+  enabled?: boolean
+  heaterWatts?: number
+  pumpWatts?: number
+  pumpLowWatts?: number
+  blowerWatts?: number
+  circulationPumpWatts?: number
+  lightWatts?: number
+  standbyWatts?: number
 }
 
 export interface devicesConfig {
   spaId?: string
   configDeviceName?: string
   hide_device?: boolean
+  hideEnergy?: boolean
   showPanelLock?: boolean
   firmware?: string
   refreshRate?: number
