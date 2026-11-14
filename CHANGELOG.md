@@ -10,6 +10,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 - fix(schema): give the default logging choice a value, so the ui stops flagging it as missing
 - docs: show two-speed pumps as fans, homebridge 1.11.4 support, and fix the readme links
 - feat: estimate each spa's power and energy for apple home, with a dashboard tab (#33) (@Wazza151)
+- ci: publish releases with node.js v26, the current lts
 
 ## v1.2.2 (2026-10-18)
 
