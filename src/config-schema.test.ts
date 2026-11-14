@@ -36,7 +36,9 @@ function asSeenByUi(schema: JsonSchema | undefined, data: unknown): unknown {
   }
   const shaped: Record<string, unknown> = { ...(data as Record<string, unknown>) }
   for (const [key, sub] of Object.entries(schema?.properties ?? {})) {
-    const value = Object.hasOwn(shaped, key) ? shaped[key] : sub.default
+    const value = Object.hasOwn(shaped, key)
+      ? shaped[key]
+      : sub.default
     if (value === undefined || value === '') {
       delete shaped[key]
     } else {
@@ -57,7 +59,10 @@ function requiredWithEmptyDefault(schema: JsonSchema, path: string): string[] {
     .map(key => `${path}.${key}`)
   const nested = Object.entries(schema.properties ?? {})
     .flatMap(([key, sub]) => requiredWithEmptyDefault(sub.items ?? sub, `${path}.${key}`))
-  return [...own, ...nested]
+  return [
+    ...own,
+    ...nested,
+  ]
 }
 
 const credentials = { email: 'someone@example.com', password: 'not-a-real-password' }
@@ -72,6 +77,10 @@ describe('config.schema.json as the config UI sees it', () => {
   })
 
   it('accepts the default logging choice once it has been saved', () => {
-    expect(uiErrors({ name: 'ControlMySpa', credentials, options: { logging: 'default' } })).toEqual([])
+    expect(uiErrors({
+      name: 'ControlMySpa',
+      credentials,
+      options: { logging: 'default' },
+    })).toEqual([])
   })
 })

@@ -68,7 +68,9 @@ export class ControlMySpaClient {
         },
       }, payload)
       if (statusCode < 200 || statusCode >= 400) {
-        throw new Error(`login failed with status ${statusCode}${[400, 401].includes(statusCode) ? ' — please check your email and password' : ''}`)
+        throw new Error(`login failed with status ${statusCode}${[400, 401].includes(statusCode)
+          ? ' — please check your email and password'
+          : ''}`)
       }
       const accessToken = body?.data?.accessToken
       if (!accessToken) {
@@ -154,7 +156,9 @@ export class ControlMySpaClient {
       },
     }, payload)
     if (statusCode < 200 || statusCode >= 400) {
-      const message = typeof body?.message === 'string' ? `: ${body.message}` : ''
+      const message = typeof body?.message === 'string'
+        ? `: ${body.message}`
+        : ''
       throw new Error(`${endpoint} failed with status ${statusCode}${message}`)
     }
   }
@@ -194,7 +198,9 @@ export class ControlMySpaClient {
    * Lock or unlock the spa's physical control panel
    */
   public async setPanelLock(spaId: string, locked: boolean): Promise<void> {
-    await this.command('panel/state', spaId, { state: locked ? 'LOCK_PANEL' : 'UNLOCK_PANEL' })
+    await this.command('panel/state', spaId, {
+      state: locked ? 'LOCK_PANEL' : 'UNLOCK_PANEL',
+    })
   }
 
   private async requestJson(url: string, options: RequestOptions, requestBody?: string): Promise<{ body: any, statusCode: number }> {
@@ -223,7 +229,9 @@ export class ControlMySpaClient {
           const statusCode = res.statusCode ?? 0
           const text = Buffer.concat(chunks).toString('utf8')
           try {
-            const body = text ? JSON.parse(text) : {}
+            const body = text
+              ? JSON.parse(text)
+              : {}
             resolve({ body, statusCode })
           } catch {
             // Some error responses are not json — surface the status instead

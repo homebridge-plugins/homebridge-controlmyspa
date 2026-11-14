@@ -22,7 +22,12 @@ const NOT_FOUND = 'dashboard request failed with status 404'
 const BAD_CREDENTIALS = 'login failed with status 401 — please check your email and password'
 
 function makePlatform() {
-  const logs = { warn: [] as string[], error: [] as string[], debug: [] as string[], success: [] as string[] }
+  const logs = {
+    warn: [] as string[],
+    error: [] as string[],
+    debug: [] as string[],
+    success: [] as string[],
+  }
   const platform = Object.create(ControlMySpaPlatform.prototype) as ControlMySpaPlatform
   Object.assign(platform, {
     warnLog: async (m: string) => void logs.warn.push(m),
@@ -157,8 +162,12 @@ describe('an account that comes back with no spas', () => {
     const removed: string[] = []
 
     Object.assign(platform, {
-      config: { credentials: { email: 'someone@example.com', password: 'secret' } },
-      accessories: [{ UUID: 'cached-uuid', displayName: 'Spa Pool' }],
+      config: {
+        credentials: { email: 'someone@example.com', password: 'secret' },
+      },
+      accessories: [
+        { UUID: 'cached-uuid', displayName: 'Spa Pool' },
+      ],
       unregisterPlatformAccessories: (accessory: { UUID: string }) => removed.push(accessory.UUID),
       infoLog: async () => {},
       pollNow: async () => {},
