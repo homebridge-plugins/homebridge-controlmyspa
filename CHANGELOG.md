@@ -7,6 +7,7 @@ All notable changes to `@homebridge-plugins/homebridge-controlmyspa` will be doc
 ### Changed
 
 - chore(deps): dependency updates
+- fix(build): list the node.js types in tsconfig, a dependency stopped loading them
 
 ## v1.3.0 (2026-11-14)
 
